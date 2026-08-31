@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>minutesdatenbank</title>
+  <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet" />
+  <link href="/static/css/app.css" rel="stylesheet" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="project-meta">
+      <div><span class="label">Project:</span> <input id="project-name" /></div>
+      <div><span class="label">Team:</span> <input id="project-meeting" /> <input id="project-participants" class="wide" /></div>
+      <div class="today">Heute: <strong id="today-label"></strong></div>
+    </div>
+    <div class="toolbar" id="minutes-toolbar">
+      <button data-action="meeting">+ Meeting</button>
+      <button data-action="task">+ Task</button>
+      <button data-action="decision">+ Decision</button>
+      <button data-action="information">+ Information</button>
+      <button data-action="agenda">+ Agenda</button>
+      <span class="sep"></span>
+      <button data-action="open-tasks">Offene Aufgaben</button>
+      <button type="button" data-action="open-tasks-pdf">PDF offene Aufgaben</button>
+      <button data-action="all-rows">Alle Zeilen</button>
+      <span class="sep"></span>
+      <label class="toolbar-field">
+        <span>Meeting-Protokoll</span>
+        <select id="meeting-protocol-select">
+          <option value="">Datum wählen…</option>
+        </select>
+      </label>
+      <button type="button" data-action="meeting-protocol">PDF</button>
+      <button type="button" data-action="import">Excel importieren…</button>
+      <input
+        id="excel-import-input"
+        type="file"
+        accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+        hidden
+      />
+      <span class="row-count" id="minutes-row-count"></span>
+    </div>
+  </header>
+
+  <nav class="sheet-tabs">
+    <button class="tab active" data-sheet="minutes">Minutes</button>
+    <button class="tab" data-sheet="year-plan">Jahresdetail-Plan</button>
+  </nav>
+
+  <main>
+    <div id="minutes-table" class="sheet-panel active"></div>
+    <div id="year-plan-table" class="sheet-panel"></div>
+  </main>
+
+  <div id="row-context-menu" class="context-menu hidden" role="menu">
+    <button type="button" data-action="insert-row" role="menuitem">Zeile einfügen</button>
+    <button type="button" data-action="delete-row" role="menuitem">Zeile löschen</button>
+  </div>
+
+  <div id="meeting-create-dialog" class="modal" role="dialog" aria-labelledby="meeting-create-title" aria-hidden="true">
+    <form id="meeting-create-form" class="modal-card">
+      <h2 id="meeting-create-title">Neues Meeting</h2>
+      <p id="meeting-create-hint" class="modal-hint"></p>
+      <label class="modal-option">
+        <input type="radio" name="meeting-create-mode" value="row" checked />
+        <span>Nur Meeting-Zeile</span>
+      </label>
+      <label class="modal-option">
+        <input type="radio" name="meeting-create-mode" value="agenda" />
+        <span>Meeting mit Agenda vom vorherigen Meeting kopieren</span>
+      </label>
+      <label id="meeting-create-date-field" class="modal-date-field hidden">
+        <span>Datum des neuen Meetings</span>
+        <input id="meeting-create-date" type="date" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit">Erstellen</button>
+        <button type="button" data-action="cancel-meeting-create">Abbrechen</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="column-filter-menu" class="column-filter-menu hidden" role="dialog" aria-label="Spaltenfilter">
+    <button type="button" class="column-filter-clear hidden" data-action="clear-filter">Filter entfernen</button>
+    <input id="column-filter-search" type="search" placeholder="Suchen" />
+    <label class="column-filter-select-all-row">
+      <input id="column-filter-select-all" type="checkbox" />
+      <span>(Alles auswählen)</span>
+    </label>
+    <div class="column-filter-options"></div>
+    <div class="column-filter-actions">
+      <button type="button" data-action="ok">OK</button>
+      <button type="button" data-action="cancel">Abbrechen</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+  <script src="/static/js/column-filters.js?v=13"></script>
+  <script src="/static/js/app.js?v=26"></script>
+</body>
+</html>

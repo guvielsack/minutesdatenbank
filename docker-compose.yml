@@ -1,0 +1,14 @@
+services:
+  minutesdatenbank:
+    build: .
+    container_name: minutesdatenbank
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=sqlite:////data/minutesdatenbank.db
+    volumes:
+      - minutesdatenbank_data:/data
+    restart: unless-stopped
+
+volumes:
+  minutesdatenbank_data:

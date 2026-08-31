@@ -17,6 +17,7 @@ dist/
 # Environment and secrets
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 
@@ -32,3 +33,6 @@ Thumbs.db
 # Logs and local data
 *.log
 *.sqlite3
+data/
+_xlsm_extract/
+_xlsm_extract.zip
