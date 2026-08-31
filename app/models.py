@@ -63,3 +63,14 @@ class ImportLog(Base):
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     minute_rows: Mapped[int] = mapped_column(Integer, default=0)
     year_plan_rows: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AppUser(Base):
+    __tablename__ = "app_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str] = mapped_column(String(20))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

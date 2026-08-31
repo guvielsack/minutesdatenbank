@@ -27,7 +27,7 @@ Alternativ per PowerShell:
 .\start-minutes-tool.ps1
 ```
 
-Das Skript richtet bei Bedarf `.venv` ein, installiert Abhängigkeiten und öffnet http://127.0.0.1:8000
+Das Skript richtet bei Bedarf `.venv` ein, installiert Abhängigkeiten und öffnet http://127.0.0.1:8002
 
 ## Manuelles Setup
 
@@ -35,7 +35,7 @@ Das Skript richtet bei Bedarf `.venv` ein, installiert Abhängigkeiten und öffn
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8002
 ```
 
 ## Funktionen (Stand MVP)

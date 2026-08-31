@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benutzer – minutesdatenbank</title>
+  <link href="/static/css/app.css" rel="stylesheet" />
+</head>
+<body>
+  <header class="app-header admin-header">
+    <h1>Benutzerverwaltung</h1>
+    <div class="auth-bar">
+      <a href="/">Zur App</a>
+      <button type="button" id="logout-btn">Abmelden</button>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <section class="admin-panel">
+      <h2>Neuer Benutzer</h2>
+      <form id="user-create-form" class="admin-form">
+        <label>
+          <span>Benutzername</span>
+          <input id="new-username" type="text" required minlength="2" />
+        </label>
+        <label>
+          <span>Passwort</span>
+          <input id="new-password" type="password" required minlength="8" />
+        </label>
+        <label>
+          <span>Rolle</span>
+          <select id="new-role">
+            <option value="protokollant">Protokollant</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <button type="submit">Anlegen</button>
+      </form>
+    </section>
+
+    <section class="admin-panel">
+      <h2>Vorhandene Benutzer</h2>
+      <div id="users-table" class="admin-users-table"></div>
+    </section>
+  </main>
+
+  <script src="/static/js/admin.js?v=1"></script>
+</body>
+</html>

@@ -1,3 +1,11 @@
+let authState = {
+  authenticated: false,
+  username: null,
+  role: "jeder",
+  can_read: true,
+  can_write: false,
+  can_admin: false,
+};
 let lookups = {};
 let minutesTable;
 let yearPlanTable;
@@ -122,7 +130,15 @@ function refreshTaskStatusCell(row) {
 }
 
 async function saveMinuteCell(cell) {
+  if (!canEditData()) {
+    cell.restoreOldValue();
+    return;
+  }
   return queueCellSave(async () => {
+    if (!canEditData()) {
+      cell.restoreOldValue();
+      return;
+    }
     const row = cell.getRow();
     const field = cell.getField();
     let value = readEditedCellValue(cell);
@@ -159,14 +175,24 @@ async function saveMinuteCell(cell) {
         await applyExcelColumnFilters("minutes");
       }
     } catch (error) {
-      alert(`Speichern fehlgeschlagen: ${error.message}`);
       cell.restoreOldValue();
+      if (canEditData()) {
+        alert(`Speichern fehlgeschlagen: ${error.message}`);
+      }
     }
   });
 }
 
 async function saveYearPlanCell(cell) {
+  if (!canEditData()) {
+    cell.restoreOldValue();
+    return;
+  }
   return queueCellSave(async () => {
+    if (!canEditData()) {
+      cell.restoreOldValue();
+      return;
+    }
     const row = cell.getRow();
     const field = cell.getField();
     let value = readEditedCellValue(cell);
@@ -200,8 +226,10 @@ async function saveYearPlanCell(cell) {
         await applyExcelColumnFilters("year-plan");
       }
     } catch (error) {
-      alert(`Speichern fehlgeschlagen: ${error.message}`);
       cell.restoreOldValue();
+      if (canEditData()) {
+        alert(`Speichern fehlgeschlagen: ${error.message}`);
+      }
     }
   });
 }
@@ -438,6 +466,7 @@ async function api(path, options = {}) {
 
   const response = await fetch(path, {
     headers,
+    credentials: "include",
     keepalive: Boolean(options.keepalive),
     ...options,
   });
@@ -583,12 +612,89 @@ const statusFormatter = (cell) => {
   return value == null ? "" : String(value);
 };
 
+async function loadAuthState() {
+  authState = await api("/api/auth/me");
+}
+
+function canEditData() {
+  return Boolean(authState.can_write);
+}
+
+function canEditRemarksCell(cell) {
+  return canEditData() && cell.getRow().getData().entry_type !== "Part.";
+}
+
+function updateTableColumnEditPermissions(table) {
+  if (!table) return;
+  const allowEdit = canEditData();
+  table.getColumns().forEach((column) => {
+    const field = column.getField();
+    if (!field) return;
+    if (field === "remarks") {
+      column.updateDefinition({ editable: allowEdit ? canEditRemarksCell : false });
+      return;
+    }
+    column.updateDefinition({ editable: allowEdit });
+  });
+}
+
+function applyTableEditPermissions() {
+  updateTableColumnEditPermissions(minutesTable);
+  updateTableColumnEditPermissions(yearPlanTable);
+  document.body.classList.toggle("read-only-mode", !canEditData());
+}
+
+function blockReadOnlyCellEdit(cell) {
+  if (canEditData()) return;
+  cell.cancelEdit();
+  cell.restoreOldValue();
+}
+
+function applyAuthStateToUi() {
+  const roleLabel = document.getElementById("auth-role-label");
+  const loginLink = document.getElementById("login-link");
+  const adminLink = document.getElementById("admin-link");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  if (authState.authenticated) {
+    roleLabel.textContent = `${authState.username} (${authState.role === "admin" ? "Admin" : "Protokollant"})`;
+    loginLink.classList.add("hidden");
+    logoutBtn.classList.remove("hidden");
+  } else {
+    roleLabel.textContent = "Lesemodus (jeder)";
+    loginLink.classList.remove("hidden");
+    logoutBtn.classList.add("hidden");
+  }
+
+  adminLink.classList.toggle("hidden", !authState.can_admin);
+
+  document.querySelectorAll("[data-requires-write]").forEach((element) => {
+    element.hidden = !authState.can_write;
+  });
+  document.querySelectorAll("[data-requires-admin]").forEach((element) => {
+    element.hidden = !authState.can_admin;
+  });
+
+  ["project-name", "project-meeting", "project-participants"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.disabled = !authState.can_admin;
+  });
+
+  applyTableEditPermissions();
+}
+
+function setupAuthBar() {
+  document.getElementById("logout-btn").addEventListener("click", async () => {
+    authState = await api("/api/auth/logout", { method: "POST" });
+    applyAuthStateToUi();
+  });
+}
+
 function buildMinutesTable() {
   minutesTable = new Tabulator("#minutes-table", {
-    height: "calc(100vh - 190px)",
+    height: "calc(100vh - 155px)",
     layout: "fitColumns",
     index: "id",
-    editable: true,
     selectableRows: true,
     virtualDom: false,
     variableHeight: true,
@@ -597,6 +703,7 @@ function buildMinutesTable() {
       minWidth: 70,
       vertAlign: "top",
       headerSort: false,
+      editable: canEditData(),
     },
     rowFormatter(row) {
       const el = row.getElement();
@@ -661,7 +768,7 @@ function buildMinutesTable() {
         title: "Bemerkung / Dauer",
         field: "remarks",
         width: 110,
-        editable: (cell) => cell.getRow().getData().entry_type !== "Part.",
+        editable: canEditData() ? canEditRemarksCell : false,
         editor: "input",
         formatter: meetingRemarksFormatter,
         titleFormatter: excelHeaderTitle("Bemerkung /<br>Dauer", "remarks", { html: true }),
@@ -686,8 +793,13 @@ function buildMinutesTable() {
     ],
   });
   minutesTable.on("cellEdited", (cell) => {
+    if (!canEditData()) {
+      cell.restoreOldValue();
+      return;
+    }
     saveMinuteCell(cell);
   });
+  minutesTable.on("cellEditing", blockReadOnlyCellEdit);
 }
 
 function buildYearPlanTable() {
@@ -699,11 +811,13 @@ function buildYearPlanTable() {
   };
 
   yearPlanTable = new Tabulator("#year-plan-table", {
-    height: "calc(100vh - 190px)",
+    height: "calc(100vh - 155px)",
     layout: "fitDataStretch",
     index: "id",
-    editable: true,
     placeholder: "Kein Jahresplan – optional per Excel importieren.",
+    columnDefaults: {
+      editable: canEditData(),
+    },
     columns: [
       {
         title: "Tag",
@@ -775,8 +889,13 @@ function buildYearPlanTable() {
     ],
   });
   yearPlanTable.on("cellEdited", (cell) => {
+    if (!canEditData()) {
+      cell.restoreOldValue();
+      return;
+    }
     saveYearPlanCell(cell);
   });
+  yearPlanTable.on("cellEditing", blockReadOnlyCellEdit);
 }
 
 async function loadProject() {
@@ -1209,6 +1328,7 @@ function setupMinutesContextMenu() {
   const hideMenu = () => menu.classList.add("hidden");
 
   minutesTable.on("rowContext", (event, row) => {
+    if (!authState.can_write) return;
     event.preventDefault();
     contextRow = row;
     row.select();
@@ -1251,7 +1371,7 @@ function setupMinutesContextMenu() {
 function setupRowShortcuts() {
   document.addEventListener("keydown", async (event) => {
     const minutesVisible = document.getElementById("minutes-table").classList.contains("active");
-    if (!minutesVisible || !minutesTable) return;
+    if (!minutesVisible || !minutesTable || !authState.can_write) return;
     if (event.key === "Delete" && !event.target.closest("input, textarea")) {
       event.preventDefault();
       try {
@@ -1280,6 +1400,9 @@ async function init() {
   document.getElementById("today-label").textContent = formatDateDE(
     new Date().toISOString().slice(0, 10)
   );
+  await loadAuthState();
+  setupAuthBar();
+  applyAuthStateToUi();
   lookups = await api("/api/lookups");
   buildMinutesTable();
   setupMinutesContextMenu();
@@ -1293,6 +1416,7 @@ async function init() {
   await loadProject();
   await loadMinutes({ scrollToBottom: true });
   await loadYearPlan();
+  applyTableEditPermissions();
 }
 
 init().catch((error) => {

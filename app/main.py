@@ -5,11 +5,15 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import DEFAULT_PROJECT
+from app.auth import require_admin_user, require_write_user
+from app.config import DEFAULT_PROJECT, INITIAL_ADMIN_PASSWORD, INITIAL_ADMIN_USERNAME, SESSION_SECRET
 from app.database import Base, engine, get_db, migrate_schema
 from app.importers.xlsm_import import import_workbook_bytes, year_plan_with_holidays
-from app.models import MinuteEntry, ProjectSettings, YearPlanEntry
+from app.models import AppUser, MinuteEntry, ProjectSettings, YearPlanEntry
+from app.routers.admin_users import router as admin_users_router
+from app.routers.auth import router as auth_router
 from app.schemas import (
     ImportResult,
     LookupsOut,
@@ -40,10 +44,20 @@ from app.services.minutes_actions import (
 )
 from app.services.minutes_meetings import get_meeting_by_part_id, list_meeting_summaries
 from app.services.minutes_query import apply_open_tasks_filter
+from app.services.user_service import seed_initial_admin
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="minutesdatenbank", version="0.1.0")
+app = FastAPI(title="minutesdatenbank", version="0.2.0")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="minutes_session",
+    same_site="lax",
+    max_age=14 * 24 * 3600,
+)
+app.include_router(auth_router)
+app.include_router(admin_users_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -58,8 +72,23 @@ def startup() -> None:
         if not db.query(ProjectSettings).first():
             db.add(ProjectSettings(**DEFAULT_PROJECT))
             db.commit()
+        seed_initial_admin(
+            db,
+            username=INITIAL_ADMIN_USERNAME,
+            password=INITIAL_ADMIN_PASSWORD or None,
+        )
     finally:
         db.close()
+
+
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/admin")
+def admin_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "admin.html")
 
 
 @app.get("/")
@@ -81,7 +110,11 @@ def get_project(db: Session = Depends(get_db)) -> ProjectSettings:
 
 
 @app.put("/api/project", response_model=ProjectSettingsOut)
-def update_project(payload: ProjectSettingsUpdate, db: Session = Depends(get_db)) -> ProjectSettings:
+def update_project(
+    payload: ProjectSettingsUpdate,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_admin_user),
+) -> ProjectSettings:
     settings = db.query(ProjectSettings).first()
     if not settings:
         raise HTTPException(status_code=404, detail="Project settings not found")
@@ -163,7 +196,11 @@ def meeting_protocol_pdf(part_entry_id: int, db: Session = Depends(get_db)) -> R
 
 
 @app.post("/api/minutes/insert-row", response_model=MinuteEntryOut)
-def insert_minute_row(payload: MinuteRowInsert, db: Session = Depends(get_db)) -> MinuteEntry:
+def insert_minute_row(
+    payload: MinuteRowInsert,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> MinuteEntry:
     return insert_blank_row(
         db,
         before_row_nr=payload.before_row_nr,
@@ -173,7 +210,11 @@ def insert_minute_row(payload: MinuteRowInsert, db: Session = Depends(get_db)) -
 
 
 @app.post("/api/minutes/delete-rows")
-def delete_minute_rows(payload: MinuteRowsDelete, db: Session = Depends(get_db)) -> dict:
+def delete_minute_rows(
+    payload: MinuteRowsDelete,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> dict:
     if not payload.entry_ids:
         raise HTTPException(status_code=400, detail="Keine Zeilen ausgewählt")
     deleted = delete_minute_entries(db, payload.entry_ids)
@@ -181,12 +222,20 @@ def delete_minute_rows(payload: MinuteRowsDelete, db: Session = Depends(get_db))
 
 
 @app.post("/api/minutes", response_model=MinuteEntryOut)
-def add_minute(payload: MinuteEntryCreate, db: Session = Depends(get_db)) -> MinuteEntry:
+def add_minute(
+    payload: MinuteEntryCreate,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> MinuteEntry:
     return create_minute_entry(db, payload)
 
 
 @app.post("/api/minutes/meeting", response_model=MinuteEntryOut)
-def add_meeting(payload: MeetingCreate = MeetingCreate(), db: Session = Depends(get_db)) -> MinuteEntry:
+def add_meeting(
+    payload: MeetingCreate = MeetingCreate(),
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> MinuteEntry:
     settings = db.query(ProjectSettings).first()
     participants = settings.participants if settings else None
 
@@ -204,7 +253,12 @@ def add_meeting(payload: MeetingCreate = MeetingCreate(), db: Session = Depends(
 
 
 @app.patch("/api/minutes/{entry_id}", response_model=MinuteEntryOut)
-def update_minute(entry_id: int, payload: MinuteEntryUpdate, db: Session = Depends(get_db)) -> MinuteEntry:
+def update_minute(
+    entry_id: int,
+    payload: MinuteEntryUpdate,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> MinuteEntry:
     entry = db.query(MinuteEntry).filter(MinuteEntry.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -216,7 +270,11 @@ def update_minute(entry_id: int, payload: MinuteEntryUpdate, db: Session = Depen
 
 
 @app.delete("/api/minutes/{entry_id}")
-def delete_minute(entry_id: int, db: Session = Depends(get_db)) -> dict:
+def delete_minute(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> dict:
     try:
         delete_minute_entry(db, entry_id)
     except ValueError as exc:
@@ -231,7 +289,12 @@ def list_year_plan(db: Session = Depends(get_db)) -> list[dict]:
 
 
 @app.patch("/api/year-plan/{entry_id}", response_model=YearPlanEntryOut)
-def update_year_plan(entry_id: int, payload: YearPlanEntryUpdate, db: Session = Depends(get_db)) -> dict:
+def update_year_plan(
+    entry_id: int,
+    payload: YearPlanEntryUpdate,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> dict:
     entry = db.query(YearPlanEntry).filter(YearPlanEntry.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -258,6 +321,7 @@ def _import_result(log, year_plan_included: bool) -> ImportResult:
 async def import_upload(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: AppUser = Depends(require_admin_user),
 ) -> ImportResult:
     filename = (file.filename or "upload.xlsx").strip()
     suffix = Path(filename).suffix.lower()

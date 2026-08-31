@@ -6,6 +6,9 @@ services:
       - "8002:8000"
     environment:
       - DATABASE_URL=sqlite:////data/minutesdatenbank.db
+      - SESSION_SECRET=change-me-in-production
+      - INITIAL_ADMIN_USERNAME=admin
+      - INITIAL_ADMIN_PASSWORD=change-me-on-first-deploy
     volumes:
       - minutesdatenbank_data:/data
     restart: unless-stopped

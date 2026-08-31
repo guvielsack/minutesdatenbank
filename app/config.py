@@ -6,7 +6,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'minutesdatenbank.db'}")
+_db_path = (DATA_DIR / "minutesdatenbank.db").resolve()
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_db_path.as_posix()}")
+
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-minutes-change-me")
+INITIAL_ADMIN_USERNAME = os.getenv("INITIAL_ADMIN_USERNAME", "admin")
+INITIAL_ADMIN_PASSWORD = os.getenv("INITIAL_ADMIN_PASSWORD", "")
 
 DEFAULT_PROJECT = {
     "name": "Digital Future Reko Führungsteam",

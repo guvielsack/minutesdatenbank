@@ -5,21 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>minutesdatenbank</title>
   <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet" />
-  <link href="/static/css/app.css" rel="stylesheet" />
+  <link href="/static/css/app.css?v=4" rel="stylesheet" />
 </head>
 <body>
   <header class="app-header">
-    <div class="project-meta">
-      <div><span class="label">Project:</span> <input id="project-name" /></div>
-      <div><span class="label">Team:</span> <input id="project-meeting" /> <input id="project-participants" class="wide" /></div>
-      <div class="today">Heute: <strong id="today-label"></strong></div>
+    <div class="header-top">
+      <div class="project-meta">
+        <label class="project-field">
+          <span class="label">Project:</span>
+          <input id="project-name" />
+        </label>
+        <label class="project-field">
+          <span class="label">Team:</span>
+          <input id="project-meeting" />
+          <input id="project-participants" />
+        </label>
+      </div>
+      <div class="header-right">
+        <div class="auth-bar" id="auth-bar">
+          <span id="auth-role-label">Lesemodus</span>
+          <a id="login-link" href="/login">Anmelden</a>
+          <a id="admin-link" href="/admin" class="hidden">Benutzer</a>
+          <button type="button" id="logout-btn" class="hidden">Abmelden</button>
+        </div>
+        <div class="header-meta">
+          <span class="today">Heute: <strong id="today-label"></strong></span>
+          <span class="row-count" id="minutes-row-count"></span>
+        </div>
+      </div>
     </div>
     <div class="toolbar" id="minutes-toolbar">
-      <button data-action="meeting">+ Meeting</button>
-      <button data-action="task">+ Task</button>
-      <button data-action="decision">+ Decision</button>
-      <button data-action="information">+ Information</button>
-      <button data-action="agenda">+ Agenda</button>
+      <button data-action="meeting" data-requires-write>+ Meeting</button>
+      <button data-action="task" data-requires-write>+ Task</button>
+      <button data-action="decision" data-requires-write>+ Decision</button>
+      <button data-action="information" data-requires-write>+ Information</button>
+      <button data-action="agenda" data-requires-write>+ Agenda</button>
       <span class="sep"></span>
       <button data-action="open-tasks">Offene Aufgaben</button>
       <button type="button" data-action="open-tasks-pdf">PDF offene Aufgaben</button>
@@ -32,14 +52,13 @@
         </select>
       </label>
       <button type="button" data-action="meeting-protocol">PDF</button>
-      <button type="button" data-action="import">Excel importieren…</button>
+      <button type="button" data-action="import" data-requires-admin>Excel importieren…</button>
       <input
         id="excel-import-input"
         type="file"
         accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
         hidden
       />
-      <span class="row-count" id="minutes-row-count"></span>
     </div>
   </header>
 
@@ -97,6 +116,6 @@
 
   <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
   <script src="/static/js/column-filters.js?v=13"></script>
-  <script src="/static/js/app.js?v=26"></script>
+  <script src="/static/js/app.js?v=29"></script>
 </body>
 </html>

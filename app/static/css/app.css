@@ -9,6 +9,8 @@
 
 * { box-sizing: border-box; }
 
+.hidden { display: none !important; }
+
 body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, sans-serif;
@@ -19,33 +21,109 @@ body {
 .app-header {
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-  padding: 12px 16px 8px;
+  padding: 8px 12px 6px;
+}
+
+.header-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 6px;
 }
 
 .project-meta {
-  display: grid;
-  grid-template-columns: 1fr 2fr auto;
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 10px;
+  gap: 6px 14px;
+  flex: 1 1 520px;
+  min-width: 0;
+}
+
+.project-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .project-meta input {
   border: 1px solid var(--border);
-  padding: 4px 8px;
+  padding: 3px 6px;
   font: inherit;
+  min-width: 0;
 }
 
-.project-meta input.wide { min-width: 320px; }
+#project-name {
+  width: min(240px, 28vw);
+}
 
-.label { font-weight: 600; margin-right: 6px; }
+#project-meeting {
+  width: 118px;
+}
 
-.today { color: #444; }
+#project-participants {
+  width: min(220px, 24vw);
+}
+
+.header-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  flex: 0 1 auto;
+}
+
+.header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.label { font-weight: 600; white-space: nowrap; }
+
+.today { color: #444; font-size: 0.92rem; }
+
+.auth-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.88rem;
+}
+
+.auth-bar a,
+.auth-bar button {
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+
+.auth-bar button:hover,
+.auth-bar a:hover {
+  background: var(--header);
+}
+
+.read-only-mode .tabulator-cell {
+  cursor: default;
+}
+
+.read-only-mode .tabulator-cell.tabulator-editing,
+.read-only-mode .tabulator-cell .tabulator-editor {
+  pointer-events: none;
+}
 
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -53,9 +131,10 @@ body {
 .sheet-tabs button {
   border: 1px solid var(--border);
   background: #fafafa;
-  padding: 6px 10px;
+  padding: 4px 8px;
   cursor: pointer;
   font: inherit;
+  font-size: 0.92rem;
 }
 
 .toolbar button:hover,
@@ -84,10 +163,8 @@ body {
 }
 
 .row-count {
-  margin-left: auto;
   color: #555;
   font-size: 12px;
-  padding: 0 8px;
 }
 
 .sheet-tabs {
@@ -413,4 +490,117 @@ main { padding: 0 16px 16px; }
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.login-card {
+  width: min(420px, calc(100vw - 32px));
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.login-card h1 {
+  margin: 0 0 8px;
+  font-size: 1.4rem;
+}
+
+.login-hint {
+  margin: 0 0 16px;
+  color: #555;
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.login-card input {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.login-error {
+  color: #b00020;
+  margin: 0 0 12px;
+}
+
+.login-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.login-actions button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.admin-main {
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.admin-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 16px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form button {
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.admin-users-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-users-table th,
+.admin-users-table td {
+  border: 1px solid var(--border);
+  padding: 8px;
+  vertical-align: top;
 }

@@ -31,6 +31,20 @@ Das Skript:
 
 App-URL: **http://172.24.4.13:8002/**
 
+### Zugriff / Benutzer
+
+Rollen:
+
+| Rolle | Rechte |
+|---|---|
+| **jeder** | Lesen (ohne Anmeldung) |
+| **protokollant** | Einträge bearbeiten (vom Admin angelegt) |
+| **admin** | alles inkl. Excel-Import, Projektkopf, Benutzerverwaltung |
+
+Beim **ersten Start** legt die App einen Admin an, wenn `INITIAL_ADMIN_PASSWORD` gesetzt ist (siehe `docker-compose.yml`). Danach unter **Benutzer** (`/admin`) Protokollanten anlegen.
+
+**Wichtig:** `SESSION_SECRET` und `INITIAL_ADMIN_PASSWORD` in `docker-compose.yml` vor Produktiv-Deploy anpassen.
+
 ## Erst-Deploy (manuell auf dem Server)
 
 ```bash
