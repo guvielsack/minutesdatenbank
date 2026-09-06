@@ -337,12 +337,20 @@ function restoreScrollState(state) {
   focusMinutesScrollState(state);
 }
 
-async function applyMinutesScroll(applyScroll) {
-  await recalculateMinutesLayout();
+async function applyMinutesScroll(applyScroll, { preserveLayout = false } = {}) {
+  if (!preserveLayout) {
+    await recalculateMinutesLayout();
+  }
   await applyScroll();
   await new Promise((resolve) => requestAnimationFrame(resolve));
-  await recalculateMinutesLayout();
-  await applyScroll();
+  // Zweites redraw nach dem Scrollen setzt die Position oft wieder auf oben –
+  // daher nur ohne preserveLayout (z. B. bei Scroll-State-Restore).
+  if (!preserveLayout) {
+    await recalculateMinutesLayout();
+    await applyScroll();
+  } else {
+    await applyScroll();
+  }
 }
 
 function renumberMinutesRows() {
@@ -391,14 +399,6 @@ async function scrollMinutesToBottomReliable({ maxWaitMs = 5000 } = {}) {
   let lastHeight = -1;
   let stableCount = 0;
 
-  // Einmaliges Layout, danach nur noch scrollen – volles redraw in der Schleife
-  // ist bei vielen Zeilen zu langsam und hält die Position nicht.
-  try {
-    await recalculateMinutesLayout();
-  } catch {
-    // ignore
-  }
-
   while (performance.now() - started < maxWaitMs) {
     scrollMinutesToBottom();
 
@@ -422,10 +422,22 @@ async function scrollMinutesToBottomReliable({ maxWaitMs = 5000 } = {}) {
     }
 
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   scrollMinutesToBottom();
+}
+
+function pinMinutesScrollToBottom(durationMs = 2500) {
+  const until = Date.now() + durationMs;
+  const tick = () => {
+    scrollMinutesToBottom();
+    if (Date.now() < until) {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+  setTimeout(scrollMinutesToBottom, durationMs + 50);
 }
 
 function scrollToMinuteRowById(rowId, position = "center") {
@@ -717,9 +729,21 @@ function updateTableColumnEditPermissions(table) {
 }
 
 function applyTableEditPermissions() {
+  const scrollState = minutesTable ? captureScrollState() : null;
+  const stayAtBottom = Boolean(scrollState?.nearBottom);
   updateTableColumnEditPermissions(minutesTable);
   updateTableColumnEditPermissions(yearPlanTable);
   document.body.classList.toggle("read-only-mode", !canEditData());
+  if (!minutesTable) return;
+  requestAnimationFrame(() => {
+    if (stayAtBottom) {
+      scrollMinutesToBottom();
+      return;
+    }
+    if (scrollState) {
+      focusMinutesScrollState(scrollState);
+    }
+  });
 }
 
 function blockReadOnlyCellEdit(cell) {
@@ -776,7 +800,7 @@ function buildMinutesTable() {
     selectableRows: true,
     virtualDom: false,
     variableHeight: true,
-    placeholder: "Keine Einträge – Excel importieren oder neue Zeile anlegen.",
+    placeholder: "Daten werden geladen…",
     columnDefaults: {
       minWidth: 70,
       vertAlign: "top",
@@ -1014,24 +1038,34 @@ async function loadMinutes({
   setExcelSourceData("minutes", rows);
   refreshMeetingDurationTotals();
 
-  await applyExcelColumnFilters("minutes");
-
-  await applyMinutesScroll(async () => {
-    if (scrollToRowId != null) {
-      await focusMinuteRow(scrollToRowId, { position: "center" });
-      if (editContent) await startMinuteContentEdit(scrollToRowId);
-    } else if (scrollState) {
-      await focusMinutesScrollState(scrollState);
-    } else if (scrollToBottom) {
-      await scrollMinutesToBottomReliable();
-    } else if (scrollToRowNr != null) {
-      scrollMinutesToRowNr(scrollToRowNr);
-    }
+  await applyExcelColumnFilters("minutes", {
+    restoreScroll: !scrollToBottom && scrollToRowId == null && !scrollState,
   });
+
+  await applyMinutesScroll(
+    async () => {
+      if (scrollToRowId != null) {
+        await focusMinuteRow(scrollToRowId, { position: "center" });
+        if (editContent) await startMinuteContentEdit(scrollToRowId);
+      } else if (scrollState) {
+        await focusMinutesScrollState(scrollState);
+      } else if (scrollToBottom) {
+        await scrollMinutesToBottomReliable({ maxWaitMs: 2000 });
+      } else if (scrollToRowNr != null) {
+        scrollMinutesToRowNr(scrollToRowNr);
+      }
+    },
+    { preserveLayout: scrollToBottom }
+  );
 
   refreshExcelFilterButtons("minutes");
   refreshMinutesRowCountLabel();
   await loadMeetingProtocolOptions();
+
+  if (scrollToBottom) {
+    scrollMinutesToBottom();
+    pinMinutesScrollToBottom(2500);
+  }
 }
 
 async function loadMeetingProtocolOptions() {
@@ -1615,6 +1649,7 @@ async function init() {
   buildMinutesTable();
   setupMinutesContextMenu();
   buildYearPlanTable();
+  applyTableEditPermissions();
   setupToolbar();
   setupExcelImport();
   setupMeetingCreateDialog();
@@ -1625,14 +1660,10 @@ async function init() {
   await loadProject();
   await loadMinutes({ scrollToBottom: true });
   await loadYearPlan();
-  applyTableEditPermissions();
-  await scrollMinutesToBottomReliable({ maxWaitMs: 6000 });
-  // Späte Layout-Nachzügler (Fonts/Browser) noch einmal abfangen
-  requestAnimationFrame(() => {
-    scrollMinutesToBottom();
-    setTimeout(scrollMinutesToBottom, 300);
-    setTimeout(scrollMinutesToBottom, 1000);
-  });
+  if (minutesTable) {
+    minutesTable.options.placeholder =
+      "Keine Einträge – Excel importieren oder neue Zeile anlegen.";
+  }
 }
 
 init().catch((error) => {

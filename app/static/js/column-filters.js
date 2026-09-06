@@ -187,12 +187,16 @@ function clearExcelColumnFilters(tableKey) {
   refreshExcelFilterButtons(tableKey);
 }
 
-async function applyExcelColumnFilters(tableKey) {
+async function applyExcelColumnFilters(tableKey, { restoreScroll = true } = {}) {
   const table = getExcelFilterTable(tableKey);
   if (!table) return;
 
+  const hadRows = table.getDataCount() > 0;
   const scrollState =
-    tableKey === "minutes" && typeof captureScrollState === "function"
+    tableKey === "minutes" &&
+    restoreScroll &&
+    hadRows &&
+    typeof captureScrollState === "function"
       ? captureScrollState()
       : null;
 
