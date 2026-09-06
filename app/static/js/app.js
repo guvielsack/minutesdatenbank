@@ -370,17 +370,62 @@ function scrollMinutesToBottom() {
   }
 
   const holder = getMinutesScrollHolder();
-  if (holder) {
+  if (!holder) return;
+
+  const lastElement = last.getElement?.();
+  if (lastElement) {
+    holder.scrollTop = Math.max(0, lastElement.offsetTop + lastElement.offsetHeight - holder.clientHeight);
+  } else {
     holder.scrollTop = holder.scrollHeight;
   }
 }
 
-async function scrollMinutesToBottomReliable() {
-  for (const delay of [0, 50, 100, 200, 400, 700]) {
-    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+function isMinutesNearBottom(threshold = 120) {
+  const holder = getMinutesScrollHolder();
+  if (!holder || holder.scrollHeight <= holder.clientHeight) return true;
+  return holder.scrollHeight - holder.scrollTop - holder.clientHeight <= threshold;
+}
+
+async function scrollMinutesToBottomReliable({ maxWaitMs = 5000 } = {}) {
+  const started = performance.now();
+  let lastHeight = -1;
+  let stableCount = 0;
+
+  // Einmaliges Layout, danach nur noch scrollen – volles redraw in der Schleife
+  // ist bei vielen Zeilen zu langsam und hält die Position nicht.
+  try {
     await recalculateMinutesLayout();
-    scrollMinutesToBottom();
+  } catch {
+    // ignore
   }
+
+  while (performance.now() - started < maxWaitMs) {
+    scrollMinutesToBottom();
+
+    const holder = getMinutesScrollHolder();
+    if (!holder) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      continue;
+    }
+
+    const height = holder.scrollHeight;
+    if (height > 0 && height === lastHeight) {
+      stableCount += 1;
+    } else {
+      stableCount = 0;
+      lastHeight = height;
+    }
+
+    if (isMinutesNearBottom() && stableCount >= 2) {
+      scrollMinutesToBottom();
+      return;
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+
+  scrollMinutesToBottom();
 }
 
 function scrollToMinuteRowById(rowId, position = "center") {
@@ -1581,7 +1626,13 @@ async function init() {
   await loadMinutes({ scrollToBottom: true });
   await loadYearPlan();
   applyTableEditPermissions();
-  await scrollMinutesToBottomReliable();
+  await scrollMinutesToBottomReliable({ maxWaitMs: 6000 });
+  // Späte Layout-Nachzügler (Fonts/Browser) noch einmal abfangen
+  requestAnimationFrame(() => {
+    scrollMinutesToBottom();
+    setTimeout(scrollMinutesToBottom, 300);
+    setTimeout(scrollMinutesToBottom, 1000);
+  });
 }
 
 init().catch((error) => {
