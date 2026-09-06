@@ -361,29 +361,27 @@ function renumberMinutesRows() {
   });
 }
 
+let minutesStickToBottom = false;
+let minutesStickResizeObserver = null;
+
 function scrollMinutesToTop() {
   const holder = getMinutesScrollHolder();
   if (holder) holder.scrollTop = 0;
 }
 
 function scrollMinutesToBottom() {
-  const rows = minutesTable?.getRows() || [];
-  if (rows.length === 0) return;
-
-  const last = rows[rows.length - 1];
-  try {
-    minutesTable.scrollToRow(last, "bottom", false);
-  } catch {
-    // Tabulator kann scrollToRow vor fertigem Layout ablehnen
-  }
-
   const holder = getMinutesScrollHolder();
   if (!holder) return;
-
-  const lastElement = last.getElement?.();
-  if (lastElement) {
-    holder.scrollTop = Math.max(0, lastElement.offsetTop + lastElement.offsetHeight - holder.clientHeight);
-  } else {
+  // Nur scrollHeight – offsetTop ist während Zeilenhöhen-Reflow unzuverlässig
+  // und setzt die Ansicht fälschlich wieder nach oben.
+  holder.scrollTop = holder.scrollHeight;
+  try {
+    const rows = minutesTable?.getRows() || [];
+    if (rows.length) {
+      minutesTable.scrollToRow(rows[rows.length - 1], "bottom", false);
+      holder.scrollTop = holder.scrollHeight;
+    }
+  } catch {
     holder.scrollTop = holder.scrollHeight;
   }
 }
@@ -392,6 +390,39 @@ function isMinutesNearBottom(threshold = 120) {
   const holder = getMinutesScrollHolder();
   if (!holder || holder.scrollHeight <= holder.clientHeight) return true;
   return holder.scrollHeight - holder.scrollTop - holder.clientHeight <= threshold;
+}
+
+function setMinutesStickToBottom(enabled) {
+  minutesStickToBottom = Boolean(enabled);
+  const holder = getMinutesScrollHolder();
+  if (!holder) return;
+
+  if (!enabled) {
+    if (minutesStickResizeObserver) {
+      minutesStickResizeObserver.disconnect();
+      minutesStickResizeObserver = null;
+    }
+    return;
+  }
+
+  const stick = () => {
+    if (!minutesStickToBottom) return;
+    holder.scrollTop = holder.scrollHeight;
+  };
+
+  stick();
+
+  if (!minutesStickResizeObserver) {
+    minutesStickResizeObserver = new ResizeObserver(stick);
+    minutesStickResizeObserver.observe(holder);
+    const tableEl = holder.querySelector(".tabulator-table");
+    if (tableEl) minutesStickResizeObserver.observe(tableEl);
+  }
+
+  const unlock = () => setMinutesStickToBottom(false);
+  holder.addEventListener("wheel", unlock, { passive: true, once: true });
+  holder.addEventListener("pointerdown", unlock, { once: true });
+  holder.addEventListener("touchstart", unlock, { passive: true, once: true });
 }
 
 async function scrollMinutesToBottomReliable({ maxWaitMs = 5000 } = {}) {
@@ -416,7 +447,7 @@ async function scrollMinutesToBottomReliable({ maxWaitMs = 5000 } = {}) {
       lastHeight = height;
     }
 
-    if (isMinutesNearBottom() && stableCount >= 2) {
+    if (isMinutesNearBottom(40) && stableCount >= 3) {
       scrollMinutesToBottom();
       return;
     }
@@ -429,15 +460,10 @@ async function scrollMinutesToBottomReliable({ maxWaitMs = 5000 } = {}) {
 }
 
 function pinMinutesScrollToBottom(durationMs = 2500) {
-  const until = Date.now() + durationMs;
-  const tick = () => {
-    scrollMinutesToBottom();
-    if (Date.now() < until) {
-      requestAnimationFrame(tick);
-    }
-  };
-  requestAnimationFrame(tick);
-  setTimeout(scrollMinutesToBottom, durationMs + 50);
+  setMinutesStickToBottom(true);
+  // Fallback: nach Timeout nicht freigeben – Freigabe nur durch Nutzer-Scroll.
+  // durationMs bleibt für Kompatibilität, erzwingt nur nochmals ein Scroll.
+  setTimeout(() => scrollMinutesToBottom(), durationMs);
 }
 
 function scrollToMinuteRowById(rowId, position = "center") {
@@ -529,9 +555,18 @@ async function focusMinutesScrollState(state) {
 }
 
 async function recalculateMinutesLayout() {
-  minutesTable.getRows().forEach((row) => {
-    row.normalizeHeight();
-  });
+  if (!minutesTable) return;
+  try {
+    minutesTable.getRows("visible").forEach((row) => {
+      try {
+        row.normalizeHeight();
+      } catch {
+        // Zeile ggf. noch nicht im DOM
+      }
+    });
+  } catch {
+    // ignore
+  }
   await minutesTable.redraw(true);
 }
 
@@ -772,7 +807,10 @@ function buildMinutesTable() {
     layout: "fitColumns",
     index: "id",
     selectableRows: true,
-    virtualDom: false,
+    // Virtual DOM: nur sichtbare Zeilen rendern – verhindert Scroll-Reset
+    // durch massives Nachberechnen aller Zeilenhöhen beim Start.
+    renderVertical: "virtual",
+    renderHorizontal: "basic",
     variableHeight: true,
     placeholder: "Daten werden geladen…",
     columnDefaults: {
@@ -1623,8 +1661,8 @@ async function init() {
   applyAuthStateToUi();
   lookups = await api("/api/lookups");
 
-  const minutesEl = document.getElementById("minutes-table");
-  minutesEl.classList.add("boot-pending");
+  const bootShell = document.getElementById("minutes-boot-shell");
+  bootShell.classList.add("boot-pending");
 
   buildMinutesTable();
   setupMinutesContextMenu();
@@ -1638,23 +1676,23 @@ async function init() {
   setupRowShortcuts();
   setupExcelColumnFilterMenu();
 
-  // Späte Tabulator-Renders nach dem Start wieder nach unten ziehen
-  let bootLockBottom = true;
   minutesTable.on("renderComplete", () => {
-    if (bootLockBottom) scrollMinutesToBottom();
+    if (minutesStickToBottom) scrollMinutesToBottom();
+  });
+  minutesTable.on("dataProcessed", () => {
+    if (minutesStickToBottom) scrollMinutesToBottom();
   });
 
   await loadProject();
+  setMinutesStickToBottom(true);
   await loadMinutes({ scrollToBottom: true });
   await loadYearPlan();
 
-  await scrollMinutesToBottomReliable({ maxWaitMs: 4000 });
+  await scrollMinutesToBottomReliable({ maxWaitMs: 5000 });
   scrollMinutesToBottom();
-  minutesEl.classList.remove("boot-pending");
-  pinMinutesScrollToBottom(4000);
-  setTimeout(() => {
-    bootLockBottom = false;
-  }, 4500);
+  bootShell.classList.remove("boot-pending");
+  scrollMinutesToBottom();
+  setMinutesStickToBottom(true);
 
   if (minutesTable) {
     minutesTable.options.placeholder =

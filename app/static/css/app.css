@@ -186,9 +186,35 @@ main { padding: 0 16px 16px; }
 .sheet-panel { display: none; }
 .sheet-panel.active { display: block; }
 
-/* Während Initial-Scroll unsichtbar – verhindert sichtbares Springen oben/unten */
-#minutes-table.boot-pending {
-  visibility: hidden;
+#minutes-boot-shell {
+  position: relative;
+  display: none;
+  min-height: calc(100vh - 155px);
+}
+
+#minutes-boot-shell:has(#minutes-table.active) {
+  display: block;
+}
+
+#minutes-boot-status {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  align-items: center;
+  justify-content: center;
+  background: #f7f7f7;
+  color: #444;
+  font-size: 1rem;
+}
+
+#minutes-boot-shell.boot-pending #minutes-boot-status {
+  display: flex;
+}
+
+#minutes-boot-shell.boot-pending #minutes-table {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .tabulator {

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>minutesdatenbank</title>
   <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet" />
-  <link href="/static/css/app.css?v=5" rel="stylesheet" />
+  <link href="/static/css/app.css?v=6" rel="stylesheet" />
 </head>
 <body>
   <header class="app-header">
@@ -68,7 +68,10 @@
   </nav>
 
   <main>
-    <div id="minutes-table" class="sheet-panel active"></div>
+    <div id="minutes-boot-shell" class="boot-pending">
+      <div id="minutes-boot-status" aria-live="polite">Minutes werden geladen…</div>
+      <div id="minutes-table" class="sheet-panel active"></div>
+    </div>
     <div id="year-plan-table" class="sheet-panel"></div>
   </main>
 
@@ -139,6 +142,6 @@
 
   <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
   <script src="/static/js/column-filters.js?v=15"></script>
-  <script src="/static/js/app.js?v=36"></script>
+  <script src="/static/js/app.js?v=37"></script>
 </body>
 </html>
