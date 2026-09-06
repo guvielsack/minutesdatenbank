@@ -1264,6 +1264,7 @@ async function showOpenTasksFilter() {
   if (!choice) return;
   const scrollState = captureScrollState();
   minutesFilter = choice === "due" ? "open-due" : "open";
+  syncViewToUrl(minutesFilter);
   clearExcelColumnFilters("minutes");
   await loadMinutes({ scrollState });
 }
@@ -1602,6 +1603,7 @@ function setupToolbar() {
       }
       if (action === "all-rows") {
         minutesFilter = "all";
+        syncViewToUrl("all");
         clearExcelColumnFilters("minutes");
         await loadMinutes({ scrollToBottom: true });
       }
@@ -1719,6 +1721,27 @@ function setupTabs() {
   });
 }
 
+function parseStartViewFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = (params.get("view") || params.get("filter") || "").trim().toLowerCase();
+  if (["open-due", "due", "faellig", "fällig"].includes(raw)) return "open-due";
+  if (["open", "offen", "open-tasks"].includes(raw)) return "open";
+  if (["all", "alle", ""].includes(raw)) return "all";
+  return "all";
+}
+
+function syncViewToUrl(view) {
+  const url = new URL(window.location.href);
+  if (view === "all") {
+    url.searchParams.delete("view");
+    url.searchParams.delete("filter");
+  } else {
+    url.searchParams.set("view", view);
+    url.searchParams.delete("filter");
+  }
+  window.history.replaceState({}, "", url);
+}
+
 async function init() {
   document.getElementById("today-label").textContent = formatDateDE(
     new Date().toISOString().slice(0, 10)
@@ -1751,16 +1774,24 @@ async function init() {
     if (minutesStickToBottom) scrollMinutesToBottom();
   });
 
+  minutesFilter = parseStartViewFromUrl();
+  syncViewToUrl(minutesFilter);
+
   await loadProject();
-  setMinutesStickToBottom(true);
-  await loadMinutes({ scrollToBottom: true });
+  const startAtBottom = minutesFilter === "all";
+  setMinutesStickToBottom(startAtBottom);
+  await loadMinutes({ scrollToBottom: startAtBottom });
   await loadYearPlan();
 
-  await scrollMinutesToBottomReliable({ maxWaitMs: 5000 });
-  scrollMinutesToBottom();
+  if (startAtBottom) {
+    await scrollMinutesToBottomReliable({ maxWaitMs: 5000 });
+    scrollMinutesToBottom();
+  }
   bootShell.classList.remove("boot-pending");
-  scrollMinutesToBottom();
-  setMinutesStickToBottom(true);
+  if (startAtBottom) {
+    scrollMinutesToBottom();
+    setMinutesStickToBottom(true);
+  }
 
   if (minutesTable) {
     minutesTable.options.placeholder =
