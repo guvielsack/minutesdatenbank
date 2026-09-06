@@ -1,9 +1,16 @@
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Query
 
 from app.models import MinuteEntry
+
+DUE_SOON_DAYS = 6
+
+
+def due_soon_cutoff(today: date | None = None) -> date:
+    """Fällig = Bis-Datum bis einschließlich heute + 6 Tage."""
+    return (today or date.today()) + timedelta(days=DUE_SOON_DAYS)
 
 
 def apply_open_tasks_filter(query: Query, *, due_by: date | None = None) -> Query:

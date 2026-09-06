@@ -46,7 +46,7 @@ from app.services.minutes_actions import (
     suggest_next_meeting_date,
 )
 from app.services.minutes_meetings import get_meeting_by_part_id, list_meeting_summaries
-from app.services.minutes_query import apply_open_tasks_filter
+from app.services.minutes_query import apply_open_tasks_filter, due_soon_cutoff
 from app.services.user_service import seed_initial_admin
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -141,29 +141,21 @@ def list_minutes(
 
 @app.get("/api/minutes/open-tasks", response_model=list[MinuteEntryOut])
 def list_open_tasks(
-    due: Literal["all", "next-meeting"] = Query(default="all"),
+    due: Literal["all", "within-6-days", "next-meeting"] = Query(default="all"),
     db: Session = Depends(get_db),
 ) -> list[MinuteEntry]:
     query = db.query(MinuteEntry).order_by(MinuteEntry.row_nr, MinuteEntry.id)
-    due_by = None
-    if due == "next-meeting":
-        last_meeting = get_last_meeting_block(db)
-        last_date = last_meeting.meeting_date if last_meeting else None
-        due_by = suggest_next_meeting_date(last_date)
+    due_by = due_soon_cutoff() if due in {"within-6-days", "next-meeting"} else None
     return apply_open_tasks_filter(query, due_by=due_by).all()
 
 
 @app.get("/api/minutes/open-tasks.pdf")
 def open_tasks_pdf(
-    due: Literal["all", "next-meeting"] = Query(default="all"),
+    due: Literal["all", "within-6-days", "next-meeting"] = Query(default="all"),
     db: Session = Depends(get_db),
 ) -> Response:
     query = db.query(MinuteEntry).order_by(MinuteEntry.row_nr, MinuteEntry.id)
-    due_by = None
-    if due == "next-meeting":
-        last_meeting = get_last_meeting_block(db)
-        last_date = last_meeting.meeting_date if last_meeting else None
-        due_by = suggest_next_meeting_date(last_date)
+    due_by = due_soon_cutoff() if due in {"within-6-days", "next-meeting"} else None
     entries = apply_open_tasks_filter(query, due_by=due_by).all()
     project = db.query(ProjectSettings).first()
     pdf_bytes = build_open_tasks_pdf(project, entries)

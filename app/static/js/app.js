@@ -1049,7 +1049,7 @@ async function loadMinutes({
   await commitOpenCellEdits();
   let path = "/api/minutes";
   if (minutesFilter === "open") path = "/api/minutes/open-tasks?due=all";
-  if (minutesFilter === "open-due") path = "/api/minutes/open-tasks?due=next-meeting";
+  if (minutesFilter === "open-due") path = "/api/minutes/open-tasks?due=within-6-days";
   const rows = await api(path);
   setExcelSourceData("minutes", rows);
   refreshMeetingDurationTotals();
@@ -1108,7 +1108,7 @@ async function downloadOpenTasksPdf() {
   const choice = await showOpenTasksDialog();
   if (!choice) return;
 
-  const due = choice === "due" ? "next-meeting" : "all";
+  const due = choice === "due" ? "within-6-days" : "all";
   const response = await fetch(`/api/minutes/open-tasks.pdf?due=${due}`);
   if (!response.ok) {
     const detail = await response.text();
@@ -1216,28 +1216,22 @@ function showOpenTasksDialog() {
 
   allMode.checked = true;
   dueMode.checked = false;
+
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() + 6);
+  const cutoffIso = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+  const cutoffLabel = formatDateDE(cutoffIso);
+
   hint.textContent = "Welche offenen Aufgaben sollen angezeigt werden?";
-  dueLabel.textContent = "Nur fällige (zum nächsten Meeting)";
+  dueLabel.textContent = `Nur fällige (Bis ≤ ${cutoffLabel}, heute + 6 Tage)`;
 
   dialog.classList.add("is-open");
   dialog.setAttribute("aria-hidden", "false");
 
-  return api("/api/minutes/meetings/suggest-next")
-    .then((suggestion) => {
-      const nextDate = formatDateDE(suggestion.suggested_date);
-      dueLabel.textContent = `Nur fällige (Bis ≤ ${nextDate}, nächstes Meeting)`;
-      hint.textContent = suggestion.previous_meeting_date
-        ? `Nächstes Meeting: ${nextDate} (nach ${formatDateDE(suggestion.previous_meeting_date)}).`
-        : `Nächstes Meeting (geschätzt): ${nextDate}.`;
-      return new Promise((resolve) => {
-        dialog._resolve = resolve;
-      });
-    })
-    .catch(() => {
-      return new Promise((resolve) => {
-        dialog._resolve = resolve;
-      });
-    });
+  return new Promise((resolve) => {
+    dialog._resolve = resolve;
+  });
 }
 
 function hideOpenTasksDialog(result = null) {
