@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -139,15 +140,31 @@ def list_minutes(
 
 
 @app.get("/api/minutes/open-tasks", response_model=list[MinuteEntryOut])
-def list_open_tasks(db: Session = Depends(get_db)) -> list[MinuteEntry]:
+def list_open_tasks(
+    due: Literal["all", "next-meeting"] = Query(default="all"),
+    db: Session = Depends(get_db),
+) -> list[MinuteEntry]:
     query = db.query(MinuteEntry).order_by(MinuteEntry.row_nr, MinuteEntry.id)
-    return apply_open_tasks_filter(query).all()
+    due_by = None
+    if due == "next-meeting":
+        last_meeting = get_last_meeting_block(db)
+        last_date = last_meeting.meeting_date if last_meeting else None
+        due_by = suggest_next_meeting_date(last_date)
+    return apply_open_tasks_filter(query, due_by=due_by).all()
 
 
 @app.get("/api/minutes/open-tasks.pdf")
-def open_tasks_pdf(db: Session = Depends(get_db)) -> Response:
+def open_tasks_pdf(
+    due: Literal["all", "next-meeting"] = Query(default="all"),
+    db: Session = Depends(get_db),
+) -> Response:
     query = db.query(MinuteEntry).order_by(MinuteEntry.row_nr, MinuteEntry.id)
-    entries = apply_open_tasks_filter(query).all()
+    due_by = None
+    if due == "next-meeting":
+        last_meeting = get_last_meeting_block(db)
+        last_date = last_meeting.meeting_date if last_meeting else None
+        due_by = suggest_next_meeting_date(last_date)
+    entries = apply_open_tasks_filter(query, due_by=due_by).all()
     project = db.query(ProjectSettings).first()
     pdf_bytes = build_open_tasks_pdf(project, entries)
     filename_date = date.today().isoformat()

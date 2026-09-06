@@ -9,7 +9,7 @@ let authState = {
 let lookups = {};
 let minutesTable;
 let yearPlanTable;
-let minutesFilter = "all";
+let minutesFilter = "all"; // "all" | "open" | "open-due"
 let pendingCellSaves = Promise.resolve();
 let copiedMinuteRow = null;
 
@@ -252,7 +252,9 @@ function updateMinutesRowCount(count, filtered = false) {
   const label = document.getElementById("minutes-row-count");
   if (!label) return;
   if (filtered) {
-    label.textContent = count != null ? `${count} offene Aufgaben` : "";
+    const dueOnly = minutesFilter === "open-due";
+    label.textContent =
+      count != null ? `${count} ${dueOnly ? "fällige Aufgaben" : "offene Aufgaben"}` : "";
   } else {
     label.textContent = count != null ? `${count} Zeilen` : "";
   }
@@ -264,10 +266,11 @@ function refreshMinutesRowCountLabel() {
   if (!label) return;
   const total = getExcelSourceData("minutes").length;
   const visible = minutesTable.getDataCount();
-  const filteredView = minutesFilter === "open";
+  const filteredView = minutesFilter === "open" || minutesFilter === "open-due";
+  const dueOnly = minutesFilter === "open-due";
   if (visible < total) {
     label.textContent = filteredView
-      ? `${visible} von ${total} offene Aufgaben`
+      ? `${visible} von ${total} ${dueOnly ? "fällige Aufgaben" : "offene Aufgaben"}`
       : `${visible} von ${total} Zeilen`;
   } else {
     updateMinutesRowCount(total, filteredView);
@@ -1044,8 +1047,9 @@ async function loadMinutes({
   editContent = false,
 } = {}) {
   await commitOpenCellEdits();
-  const isOpenFilter = minutesFilter === "open";
-  const path = isOpenFilter ? "/api/minutes/open-tasks" : "/api/minutes";
+  let path = "/api/minutes";
+  if (minutesFilter === "open") path = "/api/minutes/open-tasks?due=all";
+  if (minutesFilter === "open-due") path = "/api/minutes/open-tasks?due=next-meeting";
   const rows = await api(path);
   setExcelSourceData("minutes", rows);
   refreshMeetingDurationTotals();
@@ -1101,7 +1105,11 @@ async function loadMeetingProtocolOptions() {
 }
 
 async function downloadOpenTasksPdf() {
-  const response = await fetch("/api/minutes/open-tasks.pdf");
+  const choice = await showOpenTasksDialog();
+  if (!choice) return;
+
+  const due = choice === "due" ? "next-meeting" : "all";
+  const response = await fetch(`/api/minutes/open-tasks.pdf?due=${due}`);
   if (!response.ok) {
     const detail = await response.text();
     let message = detail || "PDF konnte nicht erstellt werden.";
@@ -1118,7 +1126,8 @@ async function downloadOpenTasksPdf() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `offene-aufgaben-${formatDateDE(new Date().toISOString().slice(0, 10)).replace(/\./g, "-")}.pdf`;
+  const suffix = choice === "due" ? "faellig" : "offen";
+  link.download = `aufgaben-${suffix}-${formatDateDE(new Date().toISOString().slice(0, 10)).replace(/\./g, "-")}.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1196,6 +1205,73 @@ function updateMeetingCreateDialogState() {
   const mode = document.querySelector('input[name="meeting-create-mode"]:checked')?.value;
   const dateField = document.getElementById("meeting-create-date-field");
   dateField.classList.toggle("hidden", mode !== "agenda");
+}
+
+function showOpenTasksDialog() {
+  const dialog = document.getElementById("open-tasks-dialog");
+  const hint = document.getElementById("open-tasks-hint");
+  const dueLabel = document.getElementById("open-tasks-due-label");
+  const allMode = document.querySelector('input[name="open-tasks-mode"][value="all"]');
+  const dueMode = document.querySelector('input[name="open-tasks-mode"][value="due"]');
+
+  allMode.checked = true;
+  dueMode.checked = false;
+  hint.textContent = "Welche offenen Aufgaben sollen angezeigt werden?";
+  dueLabel.textContent = "Nur fällige (zum nächsten Meeting)";
+
+  dialog.classList.add("is-open");
+  dialog.setAttribute("aria-hidden", "false");
+
+  return api("/api/minutes/meetings/suggest-next")
+    .then((suggestion) => {
+      const nextDate = formatDateDE(suggestion.suggested_date);
+      dueLabel.textContent = `Nur fällige (Bis ≤ ${nextDate}, nächstes Meeting)`;
+      hint.textContent = suggestion.previous_meeting_date
+        ? `Nächstes Meeting: ${nextDate} (nach ${formatDateDE(suggestion.previous_meeting_date)}).`
+        : `Nächstes Meeting (geschätzt): ${nextDate}.`;
+      return new Promise((resolve) => {
+        dialog._resolve = resolve;
+      });
+    })
+    .catch(() => {
+      return new Promise((resolve) => {
+        dialog._resolve = resolve;
+      });
+    });
+}
+
+function hideOpenTasksDialog(result = null) {
+  const dialog = document.getElementById("open-tasks-dialog");
+  dialog.classList.remove("is-open");
+  dialog.setAttribute("aria-hidden", "true");
+  if (typeof dialog._resolve === "function") {
+    dialog._resolve(result);
+    dialog._resolve = null;
+  }
+}
+
+function setupOpenTasksDialog() {
+  const dialog = document.getElementById("open-tasks-dialog");
+  const form = document.getElementById("open-tasks-form");
+
+  dialog.querySelector('[data-action="cancel-open-tasks"]').addEventListener("click", () => {
+    hideOpenTasksDialog(null);
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const mode = document.querySelector('input[name="open-tasks-mode"]:checked')?.value;
+    hideOpenTasksDialog(mode === "due" ? "due" : "all");
+  });
+}
+
+async function showOpenTasksFilter() {
+  const choice = await showOpenTasksDialog();
+  if (!choice) return;
+  const scrollState = captureScrollState();
+  minutesFilter = choice === "due" ? "open-due" : "open";
+  clearExcelColumnFilters("minutes");
+  await loadMinutes({ scrollState });
 }
 
 function showMeetingCreateDialog(suggestion) {
@@ -1528,10 +1604,7 @@ function setupToolbar() {
       if (action === "information") await addEntry("I");
       if (action === "agenda") await addEntry("A");
       if (action === "open-tasks") {
-        const scrollState = captureScrollState();
-        minutesFilter = "open";
-        clearExcelColumnFilters("minutes");
-        await loadMinutes({ scrollState });
+        await showOpenTasksFilter();
       }
       if (action === "all-rows") {
         minutesFilter = "all";
@@ -1671,6 +1744,7 @@ async function init() {
   setupToolbar();
   setupExcelImport();
   setupMeetingCreateDialog();
+  setupOpenTasksDialog();
   setupPasteRowDialog();
   setupTabs();
   setupRowShortcuts();

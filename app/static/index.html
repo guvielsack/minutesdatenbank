@@ -84,6 +84,25 @@
     <button type="button" data-action="delete-row" role="menuitem">Zeile löschen</button>
   </div>
 
+  <div id="open-tasks-dialog" class="modal" role="dialog" aria-labelledby="open-tasks-title" aria-hidden="true">
+    <form id="open-tasks-form" class="modal-card">
+      <h2 id="open-tasks-title">Offene Aufgaben</h2>
+      <p id="open-tasks-hint" class="modal-hint">Welche offenen Aufgaben sollen angezeigt werden?</p>
+      <label class="modal-option">
+        <input type="radio" name="open-tasks-mode" value="all" checked />
+        <span>Alle offenen Aufgaben</span>
+      </label>
+      <label class="modal-option">
+        <input type="radio" name="open-tasks-mode" value="due" />
+        <span id="open-tasks-due-label">Nur fällige (zum nächsten Meeting)</span>
+      </label>
+      <div class="modal-actions">
+        <button type="submit">Anzeigen</button>
+        <button type="button" data-action="cancel-open-tasks">Abbrechen</button>
+      </div>
+    </form>
+  </div>
+
   <div id="paste-row-dialog" class="modal" role="dialog" aria-labelledby="paste-row-title" aria-hidden="true">
     <form id="paste-row-form" class="modal-card">
       <h2 id="paste-row-title">Kopierte Zeile einfügen</h2>
@@ -142,6 +161,6 @@
 
   <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
   <script src="/static/js/column-filters.js?v=15"></script>
-  <script src="/static/js/app.js?v=37"></script>
+  <script src="/static/js/app.js?v=38"></script>
 </body>
 </html>
