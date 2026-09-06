@@ -73,8 +73,31 @@
   </main>
 
   <div id="row-context-menu" class="context-menu hidden" role="menu">
+    <button type="button" data-action="move-up" role="menuitem">Eine Zeile nach oben</button>
+    <button type="button" data-action="move-down" role="menuitem">Eine Zeile nach unten</button>
+    <button type="button" data-action="copy-row" role="menuitem">Zeile kopieren</button>
+    <button type="button" data-action="paste-row" role="menuitem" class="hidden" id="paste-row-menu-item">Kopierte Zeile einfügen</button>
     <button type="button" data-action="insert-row" role="menuitem">Zeile einfügen</button>
     <button type="button" data-action="delete-row" role="menuitem">Zeile löschen</button>
+  </div>
+
+  <div id="paste-row-dialog" class="modal" role="dialog" aria-labelledby="paste-row-title" aria-hidden="true">
+    <form id="paste-row-form" class="modal-card">
+      <h2 id="paste-row-title">Kopierte Zeile einfügen</h2>
+      <p id="paste-row-hint" class="modal-hint">Wie soll die kopierte Zeile eingefügt werden?</p>
+      <label class="modal-option">
+        <input type="radio" name="paste-row-mode" value="overwrite" checked />
+        <span>Zielzeile überschreiben</span>
+      </label>
+      <label class="modal-option">
+        <input type="radio" name="paste-row-mode" value="below" />
+        <span>Unterhalb der Zielzeile einfügen</span>
+      </label>
+      <div class="modal-actions">
+        <button type="submit">Einfügen</button>
+        <button type="button" data-action="cancel-paste-row">Abbrechen</button>
+      </div>
+    </form>
   </div>
 
   <div id="meeting-create-dialog" class="modal" role="dialog" aria-labelledby="meeting-create-title" aria-hidden="true">
@@ -116,6 +139,6 @@
 
   <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
   <script src="/static/js/column-filters.js?v=13"></script>
-  <script src="/static/js/app.js?v=29"></script>
+  <script src="/static/js/app.js?v=33"></script>
 </body>
 </html>

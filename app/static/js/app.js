@@ -11,6 +11,20 @@ let minutesTable;
 let yearPlanTable;
 let minutesFilter = "all";
 let pendingCellSaves = Promise.resolve();
+let copiedMinuteRow = null;
+
+const COPYABLE_MINUTE_FIELDS = [
+  "entry_type",
+  "content",
+  "responsible",
+  "along_with",
+  "since_when",
+  "until_when",
+  "remarks",
+  "category",
+  "status",
+  "link",
+];
 
 function getSchoolHolidaySuggestions() {
   const values = new Set(lookups.school_holiday_labels || []);
@@ -345,9 +359,28 @@ function scrollMinutesToTop() {
 }
 
 function scrollMinutesToBottom() {
-  const rows = minutesTable.getRows();
+  const rows = minutesTable?.getRows() || [];
   if (rows.length === 0) return;
-  minutesTable.scrollToRow(rows[rows.length - 1], "bottom", false);
+
+  const last = rows[rows.length - 1];
+  try {
+    minutesTable.scrollToRow(last, "bottom", false);
+  } catch {
+    // Tabulator kann scrollToRow vor fertigem Layout ablehnen
+  }
+
+  const holder = getMinutesScrollHolder();
+  if (holder) {
+    holder.scrollTop = holder.scrollHeight;
+  }
+}
+
+async function scrollMinutesToBottomReliable() {
+  for (const delay of [0, 50, 100, 200, 400, 700]) {
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    await recalculateMinutesLayout();
+    scrollMinutesToBottom();
+  }
 }
 
 function scrollToMinuteRowById(rowId, position = "center") {
@@ -945,7 +978,7 @@ async function loadMinutes({
     } else if (scrollState) {
       await focusMinutesScrollState(scrollState);
     } else if (scrollToBottom) {
-      scrollMinutesToBottom();
+      await scrollMinutesToBottomReliable();
     } else if (scrollToRowNr != null) {
       scrollMinutesToRowNr(scrollToRowNr);
     }
@@ -1173,6 +1206,106 @@ async function insertRowAt(beforeRowNr) {
   await loadMinutes({ scrollState });
 }
 
+async function moveRow(entryId, direction) {
+  if (entryId == null) return;
+  await commitOpenCellEdits();
+  const scrollState = captureScrollState();
+  await api(`/api/minutes/${entryId}/move`, {
+    method: "POST",
+    body: JSON.stringify({ direction }),
+  });
+  await loadMinutes({ scrollState });
+  const row = minutesTable.getRow(entryId);
+  if (row) row.select();
+}
+
+function copyMinuteRowData(rowData) {
+  if (!rowData) return;
+  const payload = {};
+  COPYABLE_MINUTE_FIELDS.forEach((field) => {
+    payload[field] = rowData[field] ?? null;
+  });
+  copiedMinuteRow = {
+    sourceId: rowData.id,
+    sourceRowNr: rowData.row_nr,
+    data: payload,
+  };
+}
+
+function showPasteRowDialog(targetRow) {
+  const dialog = document.getElementById("paste-row-dialog");
+  const hint = document.getElementById("paste-row-hint");
+  const overwrite = document.querySelector('input[name="paste-row-mode"][value="overwrite"]');
+  const below = document.querySelector('input[name="paste-row-mode"][value="below"]');
+
+  overwrite.checked = true;
+  below.checked = false;
+  const targetNr = targetRow?.row_nr ?? "?";
+  const sourceNr = copiedMinuteRow?.sourceRowNr ?? "?";
+  hint.textContent = `Kopierte Zeile #${sourceNr} in Zielzeile #${targetNr} einfügen. Überschreiben oder unterhalb?`;
+
+  dialog.classList.add("is-open");
+  dialog.setAttribute("aria-hidden", "false");
+
+  return new Promise((resolve) => {
+    dialog._resolve = resolve;
+  });
+}
+
+function hidePasteRowDialog(result = null) {
+  const dialog = document.getElementById("paste-row-dialog");
+  dialog.classList.remove("is-open");
+  dialog.setAttribute("aria-hidden", "true");
+  if (typeof dialog._resolve === "function") {
+    dialog._resolve(result);
+    dialog._resolve = null;
+  }
+}
+
+function setupPasteRowDialog() {
+  const dialog = document.getElementById("paste-row-dialog");
+  const form = document.getElementById("paste-row-form");
+
+  dialog.querySelector('[data-action="cancel-paste-row"]').addEventListener("click", () => {
+    hidePasteRowDialog(null);
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const mode = document.querySelector('input[name="paste-row-mode"]:checked')?.value;
+    hidePasteRowDialog(mode === "below" ? "below" : "overwrite");
+  });
+}
+
+async function pasteCopiedMinuteRow(targetRow) {
+  if (!copiedMinuteRow?.data || !targetRow) return;
+
+  const mode = await showPasteRowDialog(targetRow);
+  if (!mode) return;
+
+  await commitOpenCellEdits();
+  const scrollState = captureScrollState();
+  const payload = { ...copiedMinuteRow.data };
+
+  if (mode === "overwrite") {
+    await api(`/api/minutes/${targetRow.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    await loadMinutes({ scrollState, scrollToRowId: targetRow.id });
+    return;
+  }
+
+  const created = await api("/api/minutes", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      after_row_nr: targetRow.row_nr,
+    }),
+  });
+  await loadMinutes({ scrollState, scrollToRowId: created.id });
+}
+
 async function addEntry(entryType) {
   await addMinuteAtBottom("/api/minutes", {
     entry_type: entryType,
@@ -1321,8 +1454,25 @@ function setupToolbar() {
   });
 }
 
+function positionContextMenu(menu, clientX, clientY) {
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  menu.classList.remove("hidden");
+
+  const rect = menu.getBoundingClientRect();
+  const padding = 8;
+  const maxLeft = Math.max(padding, window.innerWidth - rect.width - padding);
+  const maxTop = Math.max(padding, window.innerHeight - rect.height - padding);
+  const left = Math.min(Math.max(clientX, padding), maxLeft);
+  const top = Math.min(Math.max(clientY, padding), maxTop);
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
 function setupMinutesContextMenu() {
   const menu = document.getElementById("row-context-menu");
+  const pasteItem = document.getElementById("paste-row-menu-item");
   let contextRow = null;
 
   const hideMenu = () => menu.classList.add("hidden");
@@ -1332,9 +1482,8 @@ function setupMinutesContextMenu() {
     event.preventDefault();
     contextRow = row;
     row.select();
-    menu.classList.remove("hidden");
-    menu.style.left = `${event.pageX}px`;
-    menu.style.top = `${event.pageY}px`;
+    pasteItem.classList.toggle("hidden", !copiedMinuteRow);
+    positionContextMenu(menu, event.clientX, event.clientY);
   });
 
   menu.addEventListener("mousedown", (event) => {
@@ -1350,8 +1499,22 @@ function setupMinutesContextMenu() {
     hideMenu();
     try {
       await commitOpenCellEdits();
+      const rowData = contextRow?.getData();
+      const entryId = rowData?.id;
+      if (button.dataset.action === "move-up") {
+        await moveRow(entryId, "up");
+      }
+      if (button.dataset.action === "move-down") {
+        await moveRow(entryId, "down");
+      }
+      if (button.dataset.action === "copy-row") {
+        copyMinuteRowData(rowData);
+      }
+      if (button.dataset.action === "paste-row") {
+        await pasteCopiedMinuteRow(rowData);
+      }
       if (button.dataset.action === "insert-row") {
-        await insertRowAt(contextRow?.getData()?.row_nr);
+        await insertRowAt(rowData?.row_nr);
       }
       if (button.dataset.action === "delete-row") {
         await deleteSelectedRows();
@@ -1410,6 +1573,7 @@ async function init() {
   setupToolbar();
   setupExcelImport();
   setupMeetingCreateDialog();
+  setupPasteRowDialog();
   setupTabs();
   setupRowShortcuts();
   setupExcelColumnFilterMenu();
@@ -1417,6 +1581,7 @@ async function init() {
   await loadMinutes({ scrollToBottom: true });
   await loadYearPlan();
   applyTableEditPermissions();
+  await scrollMinutesToBottomReliable();
 }
 
 init().catch((error) => {

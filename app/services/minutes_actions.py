@@ -118,6 +118,30 @@ def delete_minute_entries(db: Session, entry_ids: list[int]) -> int:
     return len(entry_ids)
 
 
+def move_minute_entry(db: Session, entry_id: int, direction: str) -> MinuteEntry:
+    entries = db.query(MinuteEntry).order_by(MinuteEntry.row_nr, MinuteEntry.id).all()
+    index = next((i for i, entry in enumerate(entries) if entry.id == entry_id), None)
+    if index is None:
+        raise ValueError("Entry not found")
+    if direction == "up":
+        swap_index = index - 1
+    elif direction == "down":
+        swap_index = index + 1
+    else:
+        raise ValueError("Ungültige Richtung")
+    if swap_index < 0 or swap_index >= len(entries):
+        return entries[index]
+
+    entries[index].row_nr, entries[swap_index].row_nr = (
+        entries[swap_index].row_nr,
+        entries[index].row_nr,
+    )
+    db.commit()
+    renumber_entries(db)
+    db.commit()
+    return db.query(MinuteEntry).filter(MinuteEntry.id == entry_id).one()
+
+
 def suggest_next_meeting_date(last_date: date | None) -> date:
     if last_date is not None:
         return last_date + timedelta(days=7)

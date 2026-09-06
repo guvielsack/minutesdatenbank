@@ -24,6 +24,7 @@ from app.schemas import (
     MinuteEntryOut,
     MinuteEntryUpdate,
     MinuteRowInsert,
+    MinuteRowMove,
     MinuteRowsDelete,
     ProjectSettingsOut,
     ProjectSettingsUpdate,
@@ -40,6 +41,7 @@ from app.services.minutes_actions import (
     delete_minute_entry,
     get_last_meeting_block,
     insert_blank_row,
+    move_minute_entry,
     suggest_next_meeting_date,
 )
 from app.services.minutes_meetings import get_meeting_by_part_id, list_meeting_summaries
@@ -219,6 +221,19 @@ def delete_minute_rows(
         raise HTTPException(status_code=400, detail="Keine Zeilen ausgewählt")
     deleted = delete_minute_entries(db, payload.entry_ids)
     return {"ok": True, "deleted": deleted}
+
+
+@app.post("/api/minutes/{entry_id}/move", response_model=MinuteEntryOut)
+def move_minute_row(
+    entry_id: int,
+    payload: MinuteRowMove,
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_write_user),
+) -> MinuteEntry:
+    try:
+        return move_minute_entry(db, entry_id, payload.direction)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/minutes", response_model=MinuteEntryOut)

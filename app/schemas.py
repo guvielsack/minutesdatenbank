@@ -78,6 +78,10 @@ class MinuteRowsDelete(BaseModel):
     entry_ids: list[int]
 
 
+class MinuteRowMove(BaseModel):
+    direction: Literal["up", "down"]
+
+
 class MeetingCreate(BaseModel):
     with_agenda: bool = False
     meeting_date: date | None = None
