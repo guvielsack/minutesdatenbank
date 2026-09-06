@@ -186,6 +186,11 @@ main { padding: 0 16px 16px; }
 .sheet-panel { display: none; }
 .sheet-panel.active { display: block; }
 
+/* Während Initial-Scroll unsichtbar – verhindert sichtbares Springen oben/unten */
+#minutes-table.boot-pending {
+  visibility: hidden;
+}
+
 .tabulator {
   border: 1px solid var(--border);
   background: var(--panel);

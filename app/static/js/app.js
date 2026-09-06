@@ -714,36 +714,10 @@ function canEditRemarksCell(cell) {
   return canEditData() && cell.getRow().getData().entry_type !== "Part.";
 }
 
-function updateTableColumnEditPermissions(table) {
-  if (!table) return;
-  const allowEdit = canEditData();
-  table.getColumns().forEach((column) => {
-    const field = column.getField();
-    if (!field) return;
-    if (field === "remarks") {
-      column.updateDefinition({ editable: allowEdit ? canEditRemarksCell : false });
-      return;
-    }
-    column.updateDefinition({ editable: allowEdit });
-  });
-}
-
 function applyTableEditPermissions() {
-  const scrollState = minutesTable ? captureScrollState() : null;
-  const stayAtBottom = Boolean(scrollState?.nearBottom);
-  updateTableColumnEditPermissions(minutesTable);
-  updateTableColumnEditPermissions(yearPlanTable);
+  // Kein column.updateDefinition – das triggert Tabulator-Redraw und setzt Scroll auf oben.
+  // editable wird als Funktion in den Spalten gelesen (canEditData / canEditRemarksCell).
   document.body.classList.toggle("read-only-mode", !canEditData());
-  if (!minutesTable) return;
-  requestAnimationFrame(() => {
-    if (stayAtBottom) {
-      scrollMinutesToBottom();
-      return;
-    }
-    if (scrollState) {
-      focusMinutesScrollState(scrollState);
-    }
-  });
 }
 
 function blockReadOnlyCellEdit(cell) {
@@ -805,7 +779,7 @@ function buildMinutesTable() {
       minWidth: 70,
       vertAlign: "top",
       headerSort: false,
-      editable: canEditData(),
+      editable: () => canEditData(),
     },
     rowFormatter(row) {
       const el = row.getElement();
@@ -870,7 +844,7 @@ function buildMinutesTable() {
         title: "Bemerkung / Dauer",
         field: "remarks",
         width: 110,
-        editable: canEditData() ? canEditRemarksCell : false,
+        editable: canEditRemarksCell,
         editor: "input",
         formatter: meetingRemarksFormatter,
         titleFormatter: excelHeaderTitle("Bemerkung /<br>Dauer", "remarks", { html: true }),
@@ -918,7 +892,7 @@ function buildYearPlanTable() {
     index: "id",
     placeholder: "Kein Jahresplan – optional per Excel importieren.",
     columnDefaults: {
-      editable: canEditData(),
+      editable: () => canEditData(),
     },
     columns: [
       {
@@ -1040,23 +1014,26 @@ async function loadMinutes({
 
   await applyExcelColumnFilters("minutes", {
     restoreScroll: !scrollToBottom && scrollToRowId == null && !scrollState,
+    // redraw nach setData setzt Scroll auf oben – beim Start-Scroll bewusst auslassen
+    recalculateLayout: !scrollToBottom,
   });
 
-  await applyMinutesScroll(
-    async () => {
-      if (scrollToRowId != null) {
-        await focusMinuteRow(scrollToRowId, { position: "center" });
-        if (editContent) await startMinuteContentEdit(scrollToRowId);
-      } else if (scrollState) {
-        await focusMinutesScrollState(scrollState);
-      } else if (scrollToBottom) {
-        await scrollMinutesToBottomReliable({ maxWaitMs: 2000 });
-      } else if (scrollToRowNr != null) {
-        scrollMinutesToRowNr(scrollToRowNr);
-      }
-    },
-    { preserveLayout: scrollToBottom }
-  );
+  if (scrollToRowId != null) {
+    await applyMinutesScroll(async () => {
+      await focusMinuteRow(scrollToRowId, { position: "center" });
+      if (editContent) await startMinuteContentEdit(scrollToRowId);
+    });
+  } else if (scrollState) {
+    await applyMinutesScroll(async () => {
+      await focusMinutesScrollState(scrollState);
+    });
+  } else if (scrollToBottom) {
+    await scrollMinutesToBottomReliable({ maxWaitMs: 3000 });
+  } else if (scrollToRowNr != null) {
+    await applyMinutesScroll(async () => {
+      scrollMinutesToRowNr(scrollToRowNr);
+    });
+  }
 
   refreshExcelFilterButtons("minutes");
   refreshMinutesRowCountLabel();
@@ -1064,7 +1041,6 @@ async function loadMinutes({
 
   if (scrollToBottom) {
     scrollMinutesToBottom();
-    pinMinutesScrollToBottom(2500);
   }
 }
 
@@ -1646,6 +1622,10 @@ async function init() {
   setupAuthBar();
   applyAuthStateToUi();
   lookups = await api("/api/lookups");
+
+  const minutesEl = document.getElementById("minutes-table");
+  minutesEl.classList.add("boot-pending");
+
   buildMinutesTable();
   setupMinutesContextMenu();
   buildYearPlanTable();
@@ -1657,9 +1637,25 @@ async function init() {
   setupTabs();
   setupRowShortcuts();
   setupExcelColumnFilterMenu();
+
+  // Späte Tabulator-Renders nach dem Start wieder nach unten ziehen
+  let bootLockBottom = true;
+  minutesTable.on("renderComplete", () => {
+    if (bootLockBottom) scrollMinutesToBottom();
+  });
+
   await loadProject();
   await loadMinutes({ scrollToBottom: true });
   await loadYearPlan();
+
+  await scrollMinutesToBottomReliable({ maxWaitMs: 4000 });
+  scrollMinutesToBottom();
+  minutesEl.classList.remove("boot-pending");
+  pinMinutesScrollToBottom(4000);
+  setTimeout(() => {
+    bootLockBottom = false;
+  }, 4500);
+
   if (minutesTable) {
     minutesTable.options.placeholder =
       "Keine Einträge – Excel importieren oder neue Zeile anlegen.";

@@ -187,7 +187,7 @@ function clearExcelColumnFilters(tableKey) {
   refreshExcelFilterButtons(tableKey);
 }
 
-async function applyExcelColumnFilters(tableKey, { restoreScroll = true } = {}) {
+async function applyExcelColumnFilters(tableKey, { restoreScroll = true, recalculateLayout = true } = {}) {
   const table = getExcelFilterTable(tableKey);
   if (!table) return;
 
@@ -207,7 +207,11 @@ async function applyExcelColumnFilters(tableKey, { restoreScroll = true } = {}) 
 
   await table.setData(filtered);
 
-  if (tableKey === "minutes" && typeof recalculateMinutesLayout === "function") {
+  if (
+    tableKey === "minutes" &&
+    recalculateLayout &&
+    typeof recalculateMinutesLayout === "function"
+  ) {
     await recalculateMinutesLayout();
   }
 
