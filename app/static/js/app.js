@@ -100,7 +100,10 @@ function tableHasOpenEditor(table) {
   return (
     active &&
     table.element.contains(active) &&
-    (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")
+    (active.tagName === "INPUT" ||
+      active.tagName === "TEXTAREA" ||
+      active.tagName === "SELECT" ||
+      active.isContentEditable)
   );
 }
 
@@ -493,8 +496,10 @@ async function startMinuteContentEdit(rowId) {
 
     const cellElement = row.getCell("content")?.getElement();
     const editor =
-      cellElement?.querySelector("textarea, input") ||
-      document.querySelector(".tabulator-editing textarea, .tabulator-editing input");
+      cellElement?.querySelector(".rich-text-area, textarea, input") ||
+      document.querySelector(
+        ".tabulator-editing .rich-text-area, .tabulator-editing textarea, .tabulator-editing input"
+      );
     if (editor) {
       editor.focus();
       if (typeof editor.select === "function" && editor.tagName === "INPUT") {
@@ -848,11 +853,11 @@ function buildMinutesTable() {
       {
         title: "Inhalt",
         field: "content",
-        editor: "textarea",
+        editor: richTextEditor,
         widthGrow: 3,
         minWidth: 260,
-        cssClass: "cell-content-multiline",
-        formatter: "plaintext",
+        cssClass: "cell-rich-text",
+        formatter: richTextFormatter,
         titleFormatter: excelHeaderTitle("Inhalt", "content"),
       },
       {

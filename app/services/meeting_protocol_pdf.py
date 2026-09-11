@@ -33,15 +33,107 @@ def _plain(value: object | None) -> str:
     return str(value).replace("\r\n", "\n").strip()
 
 
+_ALLOWED_PDF_COLORS = {
+    "#111111",
+    "#b91c1c",
+    "#c2410c",
+    "#15803d",
+    "#1d4ed8",
+    "#7e22ce",
+}
+
+
+def _normalize_pdf_color(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = value.strip().lower()
+    if text.startswith("rgb"):
+        return None
+    if not text.startswith("#") and len(text) == 6:
+        text = f"#{text}"
+    if text in _ALLOWED_PDF_COLORS:
+        return text
+    return None
+
+
+def _html_to_reportlab(text: str) -> str:
+    """Convert plain text or limited rich HTML to ReportLab Paragraph markup."""
+    import html
+    import re
+    from html.parser import HTMLParser
+
+    source = _plain(text)
+    if not source:
+        return " "
+
+    if not re.search(r"</?[a-z][\s\S]*>", source, flags=re.I):
+        return (
+            html.escape(source)
+            .replace("\n", "<br/>")
+            or " "
+        )
+
+    class _RichToReportLab(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.parts: list[str] = []
+            self._bold = 0
+            self._colors: list[str] = []
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            name = tag.lower()
+            attr_map = {key.lower(): (value or "") for key, value in attrs}
+            if name in {"b", "strong"}:
+                self._bold += 1
+                self.parts.append("<b>")
+            elif name == "br":
+                self.parts.append("<br/>")
+            elif name in {"span", "font"}:
+                color = _normalize_pdf_color(attr_map.get("color"))
+                if not color:
+                    style = attr_map.get("style", "")
+                    match = re.search(r"color\s*:\s*([^;]+)", style, flags=re.I)
+                    if match:
+                        color = _normalize_pdf_color(match.group(1))
+                if color:
+                    self._colors.append(color)
+                    self.parts.append(f'<font color="{color}">')
+                else:
+                    self._colors.append("")
+            elif name in {"div", "p"}:
+                if self.parts and not self.parts[-1].endswith("<br/>"):
+                    self.parts.append("<br/>")
+
+        def handle_endtag(self, tag: str) -> None:
+            name = tag.lower()
+            if name in {"b", "strong"} and self._bold > 0:
+                self._bold -= 1
+                self.parts.append("</b>")
+            elif name in {"span", "font"} and self._colors:
+                color = self._colors.pop()
+                if color:
+                    self.parts.append("</font>")
+            elif name in {"div", "p"}:
+                self.parts.append("<br/>")
+
+        def handle_data(self, data: str) -> None:
+            if data:
+                self.parts.append(html.escape(data))
+
+    parser = _RichToReportLab()
+    try:
+        parser.feed(source)
+        parser.close()
+    except Exception:
+        return html.escape(source).replace("\n", "<br/>") or " "
+
+    markup = "".join(parser.parts)
+    markup = re.sub(r"(?:<br/>\s*)+$", "", markup).strip()
+    return markup or " "
+
+
 def _pdf_paragraph(text: str, style: ParagraphStyle) -> Paragraph:
-    safe = (
-        _plain(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\n", "<br/>")
-    )
-    return Paragraph(safe or " ", style)
+    return Paragraph(_html_to_reportlab(text), style)
 
 
 class _FooterCanvas(canvas.Canvas):
