@@ -493,8 +493,9 @@ main { padding: 0 16px 16px; }
 }
 
 .modal-card-wide {
-  width: min(760px, calc(100vw - 32px));
-  max-width: 760px;
+  width: auto;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
 }
 
 .rich-text-editor-host,

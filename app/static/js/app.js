@@ -1644,7 +1644,7 @@ function setupMinutesContextMenu() {
   const pasteItem = document.getElementById("paste-row-menu-item");
   const formatItem = document.getElementById("format-content-menu-item");
   let contextRow = null;
-  let contextField = null;
+  let contextCell = null;
 
   const hideMenu = () => menu.classList.add("hidden");
 
@@ -1652,10 +1652,10 @@ function setupMinutesContextMenu() {
     if (!authState.can_write) return;
     event.preventDefault();
     contextRow = cell.getRow();
-    contextField = cell.getField();
+    contextCell = cell;
     contextRow.select();
     pasteItem.classList.toggle("hidden", !copiedMinuteRow);
-    formatItem.classList.toggle("hidden", contextField !== "content");
+    formatItem.classList.toggle("hidden", cell.getField() !== "content");
     positionContextMenu(menu, event.clientX, event.clientY);
   });
 
@@ -1675,7 +1675,7 @@ function setupMinutesContextMenu() {
       const rowData = contextRow?.getData();
       const entryId = rowData?.id;
       if (button.dataset.action === "format-content") {
-        await openRichTextContentDialog(contextRow);
+        await openRichTextContentDialog(contextRow, contextCell);
       }
       if (button.dataset.action === "move-up") {
         await moveRow(entryId, "up");
@@ -1712,19 +1712,51 @@ let richTextModalRow = null;
 
 function hideRichTextContentDialog() {
   const dialog = document.getElementById("rich-text-dialog");
+  const form = document.getElementById("rich-text-form");
   dialog.classList.remove("is-open");
   dialog.setAttribute("aria-hidden", "true");
   richTextModalController = null;
   richTextModalRow = null;
   document.getElementById("rich-text-editor-host").innerHTML = "";
+  if (form) {
+    form.style.width = "";
+    form.style.maxWidth = "";
+  }
 }
 
-async function openRichTextContentDialog(row) {
+function getContentCellWidth(row, cell) {
+  const fromCell =
+    cell?.getField?.() === "content" ? cell.getElement()?.getBoundingClientRect()?.width : 0;
+  if (fromCell > 40) return fromCell;
+
+  const contentCell = row?.getCell?.("content");
+  const fromRow = contentCell?.getElement()?.getBoundingClientRect()?.width || 0;
+  if (fromRow > 40) return fromRow;
+
+  try {
+    const column = minutesTable?.getColumn?.("content");
+    const width = column?.getWidth?.() || 0;
+    if (width > 40) return width;
+  } catch {
+    // ignore
+  }
+  return Math.min(760, window.innerWidth - 48);
+}
+
+async function openRichTextContentDialog(row, cell = null) {
   if (!row || !authState.can_write) return;
   richTextModalRow = row;
   const dialog = document.getElementById("rich-text-dialog");
+  const form = document.getElementById("rich-text-form");
   const host = document.getElementById("rich-text-editor-host");
   const value = row.getData().content;
+
+  const cellWidth = Math.round(getContentCellWidth(row, cell));
+  const maxWidth = Math.max(280, window.innerWidth - 32);
+  const dialogWidth = Math.max(280, Math.min(cellWidth, maxWidth));
+  form.style.width = `${dialogWidth}px`;
+  form.style.maxWidth = `${dialogWidth}px`;
+
   richTextModalController = mountRichTextModalEditor(host, value);
   dialog.classList.add("is-open");
   dialog.setAttribute("aria-hidden", "false");
