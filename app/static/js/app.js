@@ -859,7 +859,9 @@ function buildMinutesTable() {
         title: "Verantwortlich",
         field: "responsible",
         width: 110,
-        editor: "input",
+        editor: "textarea",
+        cssClass: "cell-content-multiline",
+        formatter: "plaintext",
         titleFormatter: excelHeaderTitle("Verantwortlich", "responsible"),
       },
       {
