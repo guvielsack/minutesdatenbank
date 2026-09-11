@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>minutesdatenbank</title>
   <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet" />
-  <link href="/static/css/app.css?v=8" rel="stylesheet" />
+  <link href="/static/css/app.css?v=9" rel="stylesheet" />
 </head>
 <body>
   <header class="app-header">
@@ -76,12 +76,25 @@
   </main>
 
   <div id="row-context-menu" class="context-menu hidden" role="menu">
+    <button type="button" data-action="format-content" role="menuitem" id="format-content-menu-item">Zelle formatiert bearbeiten</button>
     <button type="button" data-action="move-up" role="menuitem">Eine Zeile nach oben</button>
     <button type="button" data-action="move-down" role="menuitem">Eine Zeile nach unten</button>
     <button type="button" data-action="copy-row" role="menuitem">Zeile kopieren</button>
     <button type="button" data-action="paste-row" role="menuitem" class="hidden" id="paste-row-menu-item">Kopierte Zeile einfügen</button>
     <button type="button" data-action="insert-row" role="menuitem">Zeile einfügen</button>
     <button type="button" data-action="delete-row" role="menuitem">Zeile löschen</button>
+  </div>
+
+  <div id="rich-text-dialog" class="modal" role="dialog" aria-labelledby="rich-text-title" aria-hidden="true">
+    <form id="rich-text-form" class="modal-card modal-card-wide">
+      <h2 id="rich-text-title">Inhalt formatiert bearbeiten</h2>
+      <p class="modal-hint">Fett und Farbe über die Leiste. Speichern übernimmt die Formatierung in die Zelle.</p>
+      <div id="rich-text-editor-host" class="rich-text-editor-host"></div>
+      <div class="modal-actions">
+        <button type="submit">Speichern</button>
+        <button type="button" data-action="cancel-rich-text">Abbrechen</button>
+      </div>
+    </form>
   </div>
 
   <div id="open-tasks-dialog" class="modal" role="dialog" aria-labelledby="open-tasks-title" aria-hidden="true">
@@ -161,7 +174,7 @@
 
   <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
   <script src="/static/js/column-filters.js?v=15"></script>
-  <script src="/static/js/rich-text.js?v=2"></script>
-  <script src="/static/js/app.js?v=42"></script>
+  <script src="/static/js/rich-text.js?v=3"></script>
+  <script src="/static/js/app.js?v=43"></script>
 </body>
 </html>

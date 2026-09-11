@@ -481,6 +481,34 @@ main { padding: 0 16px 16px; }
   white-space: nowrap;
 }
 
+.content-plain-editor {
+  width: 100%;
+  min-height: 120px;
+  box-sizing: border-box;
+  font: inherit;
+  line-height: 1.35;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  resize: vertical;
+}
+
+.modal-card-wide {
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
+}
+
+.rich-text-editor-host,
+.rich-text-editor-modal {
+  width: 100%;
+  min-height: 280px;
+}
+
+.rich-text-area-modal {
+  min-height: 280px !important;
+  height: min(55vh, 480px) !important;
+  max-height: min(55vh, 480px) !important;
+}
+
 .tabulator-row .tabulator-cell.tabulator-editing.cell-rich-text {
   overflow: visible !important;
   padding: 2px !important;

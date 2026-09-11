@@ -496,9 +496,9 @@ async function startMinuteContentEdit(rowId) {
 
     const cellElement = row.getCell("content")?.getElement();
     const editor =
-      cellElement?.querySelector(".rich-text-area, textarea, input") ||
+      cellElement?.querySelector(".content-plain-editor, .rich-text-area, textarea, input") ||
       document.querySelector(
-        ".tabulator-editing .rich-text-area, .tabulator-editing textarea, .tabulator-editing input"
+        ".tabulator-editing .content-plain-editor, .tabulator-editing .rich-text-area, .tabulator-editing textarea, .tabulator-editing input"
       );
     if (editor) {
       editor.focus();
@@ -853,7 +853,7 @@ function buildMinutesTable() {
       {
         title: "Inhalt",
         field: "content",
-        editor: richTextEditor,
+        editor: contentPlainEditor,
         widthGrow: 3,
         minWidth: 260,
         cssClass: "cell-rich-text",
@@ -1642,16 +1642,20 @@ function positionContextMenu(menu, clientX, clientY) {
 function setupMinutesContextMenu() {
   const menu = document.getElementById("row-context-menu");
   const pasteItem = document.getElementById("paste-row-menu-item");
+  const formatItem = document.getElementById("format-content-menu-item");
   let contextRow = null;
+  let contextField = null;
 
   const hideMenu = () => menu.classList.add("hidden");
 
-  minutesTable.on("rowContext", (event, row) => {
+  minutesTable.on("cellContext", (event, cell) => {
     if (!authState.can_write) return;
     event.preventDefault();
-    contextRow = row;
-    row.select();
+    contextRow = cell.getRow();
+    contextField = cell.getField();
+    contextRow.select();
     pasteItem.classList.toggle("hidden", !copiedMinuteRow);
+    formatItem.classList.toggle("hidden", contextField !== "content");
     positionContextMenu(menu, event.clientX, event.clientY);
   });
 
@@ -1670,6 +1674,9 @@ function setupMinutesContextMenu() {
       await commitOpenCellEdits();
       const rowData = contextRow?.getData();
       const entryId = rowData?.id;
+      if (button.dataset.action === "format-content") {
+        await openRichTextContentDialog(contextRow);
+      }
       if (button.dataset.action === "move-up") {
         await moveRow(entryId, "up");
       }
@@ -1698,6 +1705,64 @@ function setupMinutesContextMenu() {
   });
   document.addEventListener("scroll", hideMenu, true);
   window.addEventListener("resize", hideMenu);
+}
+
+let richTextModalController = null;
+let richTextModalRow = null;
+
+function hideRichTextContentDialog() {
+  const dialog = document.getElementById("rich-text-dialog");
+  dialog.classList.remove("is-open");
+  dialog.setAttribute("aria-hidden", "true");
+  richTextModalController = null;
+  richTextModalRow = null;
+  document.getElementById("rich-text-editor-host").innerHTML = "";
+}
+
+async function openRichTextContentDialog(row) {
+  if (!row || !authState.can_write) return;
+  richTextModalRow = row;
+  const dialog = document.getElementById("rich-text-dialog");
+  const host = document.getElementById("rich-text-editor-host");
+  const value = row.getData().content;
+  richTextModalController = mountRichTextModalEditor(host, value);
+  dialog.classList.add("is-open");
+  dialog.setAttribute("aria-hidden", "false");
+  richTextModalController.focus();
+}
+
+function setupRichTextContentDialog() {
+  const dialog = document.getElementById("rich-text-dialog");
+  const form = document.getElementById("rich-text-form");
+
+  dialog.querySelector('[data-action="cancel-rich-text"]').addEventListener("click", () => {
+    hideRichTextContentDialog();
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!richTextModalController || !richTextModalRow) {
+      hideRichTextContentDialog();
+      return;
+    }
+    const row = richTextModalRow;
+    const entryId = row.getData().id;
+    const value = richTextModalController.getValue();
+    try {
+      await api(`/api/minutes/${entryId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ content: value }),
+      });
+      row.update({ content: value });
+      updateExcelSourceRow("minutes", { ...row.getData(), content: value });
+      if (isExcelColumnFiltered("minutes", "content")) {
+        await applyExcelColumnFilters("minutes");
+      }
+      hideRichTextContentDialog();
+    } catch (error) {
+      alert(`Speichern fehlgeschlagen: ${error.message}`);
+    }
+  });
 }
 
 function setupRowShortcuts() {
@@ -1770,6 +1835,7 @@ async function init() {
   setupMeetingCreateDialog();
   setupOpenTasksDialog();
   setupPasteRowDialog();
+  setupRichTextContentDialog();
   setupTabs();
   setupRowShortcuts();
   setupExcelColumnFilterMenu();

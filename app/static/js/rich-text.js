@@ -23,8 +23,33 @@ function looksLikeRichHtml(value) {
 
 function normalizeColorValue(value) {
   if (!value) return null;
-  const text = String(value).trim().toLowerCase();
+  let text = String(value).trim().toLowerCase();
+  // Browser liefert oft rgb(...)
+  const rgb = text.match(/^rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (rgb) {
+    const hex = `#${[rgb[1], rgb[2], rgb[3]]
+      .map((part) => Number(part).toString(16).padStart(2, "0"))
+      .join("")}`;
+    text = hex;
+  }
   if (/^#[0-9a-f]{6}$/.test(text) && ALLOWED_RICH_COLORS.has(text)) return text;
+  // nächste erlaubte Farbe (für #ff0000 o.ä. aus execCommand)
+  if (/^#[0-9a-f]{6}$/.test(text)) {
+    const map = {
+      "#000000": "#111111",
+      "#111111": "#111111",
+      "#ff0000": "#b91c1c",
+      "#b91c1c": "#b91c1c",
+      "#c2410c": "#c2410c",
+      "#008000": "#15803d",
+      "#15803d": "#15803d",
+      "#0000ff": "#1d4ed8",
+      "#1d4ed8": "#1d4ed8",
+      "#7e22ce": "#7e22ce",
+      "#800080": "#7e22ce",
+    };
+    return map[text] || null;
+  }
   return null;
 }
 
@@ -68,9 +93,7 @@ function sanitizeRichHtml(html) {
           child.replaceWith(fragment);
           return;
         }
-      } else if (tag === "B" || tag === "STRONG") {
-        [...child.attributes].forEach((attr) => child.removeAttribute(attr.name));
-      } else if (tag === "BR") {
+      } else if (tag === "B" || tag === "STRONG" || tag === "BR") {
         [...child.attributes].forEach((attr) => child.removeAttribute(attr.name));
       } else if (tag === "DIV" || tag === "P") {
         const br = document.createElement("br");
@@ -93,6 +116,18 @@ function richTextDisplayHtml(value) {
   return sanitizeRichHtml(value) || "";
 }
 
+function richHtmlToPlainText(value) {
+  if (value == null || value === "") return "";
+  const source = String(value);
+  if (!looksLikeRichHtml(source)) return source.replace(/\r\n|\r/g, "\n");
+  const template = document.createElement("template");
+  template.innerHTML = sanitizeRichHtml(source);
+  template.content.querySelectorAll("br").forEach((br) => {
+    br.replaceWith("\n");
+  });
+  return (template.content.textContent || "").replace(/\u00a0/g, " ");
+}
+
 function richTextFormatter(cell) {
   const wrap = document.createElement("div");
   wrap.className = "cell-rich-text";
@@ -100,10 +135,48 @@ function richTextFormatter(cell) {
   return wrap;
 }
 
-function richTextEditor(cell, onRendered, success, cancel) {
-  const wrap = document.createElement("div");
-  wrap.className = "rich-text-editor";
+/** Einfacher Mehrzeilen-Editor (ohne Formatierung) für normalen Zellklick. */
+function contentPlainEditor(cell, onRendered, success, cancel) {
+  const input = document.createElement("textarea");
+  input.className = "content-plain-editor";
+  input.value = richHtmlToPlainText(cell.getValue() ?? cell.getRow().getData().content);
+  input.rows = 8;
 
+  const cellEl = cell.getElement();
+  if (cellEl) {
+    input.style.width = "100%";
+    input.style.minHeight = `${Math.max(cellEl.offsetHeight || 0, 120)}px`;
+  }
+
+  let completed = false;
+  const finish = (commit) => {
+    if (completed) return;
+    completed = true;
+    if (commit) {
+      // Zeilenumbrüche behalten; Formatierung nur über den Dialog
+      success(sanitizeRichHtml(input.value));
+    } else {
+      cancel();
+    }
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener("blur", () => finish(true));
+
+  onRendered(() => {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  });
+
+  return input;
+}
+
+function buildRichTextToolbar(area) {
   const toolbar = document.createElement("div");
   toolbar.className = "rich-text-toolbar";
 
@@ -112,6 +185,11 @@ function richTextEditor(cell, onRendered, success, cancel) {
   boldBtn.className = "rich-text-btn";
   boldBtn.title = "Fett";
   boldBtn.innerHTML = "<b>B</b>";
+  boldBtn.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    area.focus();
+    document.execCommand("bold", false);
+  });
 
   const colorGroup = document.createElement("div");
   colorGroup.className = "rich-text-colors";
@@ -124,60 +202,6 @@ function richTextEditor(cell, onRendered, success, cancel) {
     swatch.dataset.color = value;
     colorGroup.appendChild(swatch);
   });
-
-  const hint = document.createElement("span");
-  hint.className = "rich-text-hint";
-  hint.textContent = "Strg+Enter speichert";
-
-  toolbar.appendChild(boldBtn);
-  toolbar.appendChild(colorGroup);
-  toolbar.appendChild(hint);
-
-  const area = document.createElement("div");
-  area.className = "rich-text-area";
-  area.contentEditable = "true";
-  area.spellcheck = true;
-  // Vollständigen Zellwert laden (nicht den ggf. gekürzten Anzeige-HTML-Stand)
-  const rawValue = cell.getValue();
-  area.innerHTML = richTextDisplayHtml(rawValue ?? cell.getRow().getData().content);
-
-  wrap.appendChild(toolbar);
-  wrap.appendChild(area);
-
-  let completed = false;
-  const finish = (commit) => {
-    if (completed) return;
-    completed = true;
-    if (commit) {
-      success(sanitizeRichHtml(area.innerHTML));
-    } else {
-      cancel();
-    }
-  };
-
-  const sizeToCell = () => {
-    const cellEl = cell.getElement();
-    if (!cellEl) return;
-    const cellHeight = cellEl.offsetHeight || 0;
-    const cellWidth = cellEl.clientWidth || 0;
-    if (cellWidth > 0) {
-      wrap.style.width = `${cellWidth}px`;
-    }
-    const toolbarHeight = toolbar.offsetHeight || 30;
-    // Mindestens so hoch wie die Zelle, maximal ~80% Viewport – dann scrollen
-    const target = Math.max(cellHeight - toolbarHeight - 10, 140);
-    const capped = Math.min(target, Math.floor(window.innerHeight * 0.8));
-    area.style.minHeight = `${capped}px`;
-    area.style.height = `${capped}px`;
-    area.style.maxHeight = `${Math.floor(window.innerHeight * 0.8)}px`;
-  };
-
-  boldBtn.addEventListener("mousedown", (event) => {
-    event.preventDefault();
-    area.focus();
-    document.execCommand("bold", false);
-  });
-
   colorGroup.addEventListener("mousedown", (event) => {
     const swatch = event.target.closest("[data-color]");
     if (!swatch) return;
@@ -186,40 +210,31 @@ function richTextEditor(cell, onRendered, success, cancel) {
     document.execCommand("foreColor", false, swatch.dataset.color);
   });
 
-  area.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-      return;
-    }
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      finish(true);
-    }
-  });
+  toolbar.appendChild(boldBtn);
+  toolbar.appendChild(colorGroup);
+  return toolbar;
+}
 
-  area.addEventListener("blur", () => {
-    setTimeout(() => {
-      if (!wrap.contains(document.activeElement)) {
-        finish(true);
-      }
-    }, 0);
-  });
+function mountRichTextModalEditor(container, initialValue) {
+  container.innerHTML = "";
+  container.classList.add("rich-text-editor", "rich-text-editor-modal");
 
-  onRendered(() => {
-    sizeToCell();
-    requestAnimationFrame(sizeToCell);
+  const area = document.createElement("div");
+  area.className = "rich-text-area rich-text-area-modal";
+  area.contentEditable = "true";
+  area.spellcheck = true;
+  area.innerHTML = richTextDisplayHtml(initialValue);
+
+  const toolbar = buildRichTextToolbar(area);
+  container.appendChild(toolbar);
+  container.appendChild(area);
+
+  requestAnimationFrame(() => {
     area.focus();
-    // Cursor ans Ende, ohne alles zu markieren
-    const selection = window.getSelection();
-    if (selection) {
-      const range = document.createRange();
-      range.selectNodeContents(area);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
   });
 
-  return wrap;
+  return {
+    getValue: () => sanitizeRichHtml(area.innerHTML),
+    focus: () => area.focus(),
+  };
 }
