@@ -125,14 +125,21 @@ function richTextEditor(cell, onRendered, success, cancel) {
     colorGroup.appendChild(swatch);
   });
 
+  const hint = document.createElement("span");
+  hint.className = "rich-text-hint";
+  hint.textContent = "Strg+Enter speichert";
+
   toolbar.appendChild(boldBtn);
   toolbar.appendChild(colorGroup);
+  toolbar.appendChild(hint);
 
   const area = document.createElement("div");
   area.className = "rich-text-area";
   area.contentEditable = "true";
   area.spellcheck = true;
-  area.innerHTML = richTextDisplayHtml(cell.getValue());
+  // Vollständigen Zellwert laden (nicht den ggf. gekürzten Anzeige-HTML-Stand)
+  const rawValue = cell.getValue();
+  area.innerHTML = richTextDisplayHtml(rawValue ?? cell.getRow().getData().content);
 
   wrap.appendChild(toolbar);
   wrap.appendChild(area);
@@ -146,6 +153,23 @@ function richTextEditor(cell, onRendered, success, cancel) {
     } else {
       cancel();
     }
+  };
+
+  const sizeToCell = () => {
+    const cellEl = cell.getElement();
+    if (!cellEl) return;
+    const cellHeight = cellEl.offsetHeight || 0;
+    const cellWidth = cellEl.clientWidth || 0;
+    if (cellWidth > 0) {
+      wrap.style.width = `${cellWidth}px`;
+    }
+    const toolbarHeight = toolbar.offsetHeight || 30;
+    // Mindestens so hoch wie die Zelle, maximal ~80% Viewport – dann scrollen
+    const target = Math.max(cellHeight - toolbarHeight - 10, 140);
+    const capped = Math.min(target, Math.floor(window.innerHeight * 0.8));
+    area.style.minHeight = `${capped}px`;
+    area.style.height = `${capped}px`;
+    area.style.maxHeight = `${Math.floor(window.innerHeight * 0.8)}px`;
   };
 
   boldBtn.addEventListener("mousedown", (event) => {
@@ -175,7 +199,6 @@ function richTextEditor(cell, onRendered, success, cancel) {
   });
 
   area.addEventListener("blur", () => {
-    // Toolbar-Klicks fokussieren kurz um – erst nach Tick speichern
     setTimeout(() => {
       if (!wrap.contains(document.activeElement)) {
         finish(true);
@@ -184,9 +207,12 @@ function richTextEditor(cell, onRendered, success, cancel) {
   });
 
   onRendered(() => {
+    sizeToCell();
+    requestAnimationFrame(sizeToCell);
     area.focus();
+    // Cursor ans Ende, ohne alles zu markieren
     const selection = window.getSelection();
-    if (selection && area.childNodes.length) {
+    if (selection) {
       const range = document.createRange();
       range.selectNodeContents(area);
       range.collapse(false);

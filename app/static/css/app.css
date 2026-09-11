@@ -415,7 +415,9 @@ main { padding: 0 16px 16px; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 220px;
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
   background: #fff;
   border: 1px solid var(--accent);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
@@ -427,6 +429,7 @@ main { padding: 0 16px 16px; }
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .rich-text-btn {
@@ -458,8 +461,9 @@ main { padding: 0 16px 16px; }
 }
 
 .rich-text-area {
-  min-height: 72px;
-  max-height: 220px;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
   overflow: auto;
   border: 1px solid #ddd;
   padding: 6px 8px;
@@ -467,10 +471,19 @@ main { padding: 0 16px 16px; }
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+  box-sizing: border-box;
 }
 
-.rich-text-area:focus {
-  outline: 1px solid var(--accent);
+.rich-text-hint {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.tabulator-row .tabulator-cell.tabulator-editing.cell-rich-text {
+  overflow: visible !important;
+  padding: 2px !important;
 }
 
 .tabulator-row.row-part { background: #fff4ce !important; font-weight: 600; }
