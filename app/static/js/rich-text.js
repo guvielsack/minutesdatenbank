@@ -128,6 +128,11 @@ function richHtmlToPlainText(value) {
   return (template.content.textContent || "").replace(/\u00a0/g, " ");
 }
 
+/** Fett/Farbe (nicht nur Zeilenumbrüche per &lt;br&gt;). */
+function contentHasRichFormatting(value) {
+  return /<(b|strong|span|font)\b/i.test(String(value ?? ""));
+}
+
 function richTextFormatter(cell) {
   const wrap = document.createElement("div");
   wrap.className = "cell-rich-text";
@@ -137,9 +142,24 @@ function richTextFormatter(cell) {
 
 /** Einfacher Mehrzeilen-Editor (ohne Formatierung) für normalen Zellklick. */
 function contentPlainEditor(cell, onRendered, success, cancel) {
+  const original = cell.getValue() ?? cell.getRow().getData().content ?? "";
+
+  // Formatierter Inhalt: kein Klartext-Editor (würde Fett/Farbe zerstören) → Dialog
+  if (contentHasRichFormatting(original)) {
+    const placeholder = document.createElement("span");
+    onRendered(() => {
+      cancel();
+      if (typeof openRichTextContentDialog === "function") {
+        openRichTextContentDialog(cell.getRow(), cell);
+      }
+    });
+    return placeholder;
+  }
+
+  const originalPlain = richHtmlToPlainText(original);
   const input = document.createElement("textarea");
   input.className = "content-plain-editor";
-  input.value = richHtmlToPlainText(cell.getValue() ?? cell.getRow().getData().content);
+  input.value = originalPlain;
   input.rows = 8;
 
   const cellEl = cell.getElement();
@@ -152,12 +172,16 @@ function contentPlainEditor(cell, onRendered, success, cancel) {
   const finish = (commit) => {
     if (completed) return;
     completed = true;
-    if (commit) {
-      // Zeilenumbrüche behalten; Formatierung nur über den Dialog
-      success(sanitizeRichHtml(input.value));
-    } else {
+    if (!commit) {
       cancel();
+      return;
     }
+    // Unverändert (z. B. versehentlicher Klick): Original inkl. &lt;br&gt; behalten
+    if (input.value === originalPlain) {
+      success(original);
+      return;
+    }
+    success(sanitizeRichHtml(input.value));
   };
 
   input.addEventListener("keydown", (event) => {
