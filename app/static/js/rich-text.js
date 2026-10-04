@@ -61,8 +61,10 @@ function sanitizeRichHtml(html) {
   }
 
   const template = document.createElement("template");
-  template.innerHTML = source;
-  const allowed = new Set(["B", "STRONG", "BR", "SPAN", "FONT", "DIV", "P"]);
+  template.innerHTML = source.replace(/\r\n|\r|\n/g, "<br>");
+  normalizeContentEditableBlocks(template.content);
+
+  const allowed = new Set(["B", "STRONG", "BR", "SPAN", "FONT"]);
 
   const walk = (node) => {
     [...node.childNodes].forEach((child) => {
@@ -95,10 +97,6 @@ function sanitizeRichHtml(html) {
         }
       } else if (tag === "B" || tag === "STRONG" || tag === "BR") {
         [...child.attributes].forEach((attr) => child.removeAttribute(attr.name));
-      } else if (tag === "DIV" || tag === "P") {
-        const br = document.createElement("br");
-        child.replaceWith(...child.childNodes, br);
-        return;
       }
 
       walk(child);
@@ -108,8 +106,36 @@ function sanitizeRichHtml(html) {
   walk(template.content);
 
   return template.innerHTML
+    .replace(/\u200B/g, "")
     .replace(/(?:<br\s*\/?>\s*)+$/i, "")
+    .replace(/(<br\s*\/?>\s*){3,}/gi, "<br><br>")
     .trim();
+}
+
+/** contentEditable erzeugt oft &lt;div&gt;/&lt;p&gt; bei Enter – in &lt;br&gt; umwandeln. */
+function normalizeContentEditableBlocks(root) {
+  const blocks = [...root.querySelectorAll("div, p")];
+  blocks.forEach((el) => {
+    const parent = el.parentNode;
+    if (!parent) return;
+
+    // Zeilenumbruch vor jedem Block (außer am Anfang)
+    if (el.previousSibling) {
+      parent.insertBefore(document.createElement("br"), el);
+    }
+
+    const onlyBreak =
+      el.childNodes.length === 1 &&
+      el.firstChild.nodeType === Node.ELEMENT_NODE &&
+      el.firstChild.tagName === "BR";
+
+    if (!onlyBreak) {
+      while (el.firstChild) {
+        parent.insertBefore(el.firstChild, el);
+      }
+    }
+    el.remove();
+  });
 }
 
 function richTextDisplayHtml(value) {
@@ -253,12 +279,27 @@ function mountRichTextModalEditor(container, initialValue) {
   container.appendChild(toolbar);
   container.appendChild(area);
 
+  // Enter → echter Zeilenumbruch (<br>), nicht Browser-<div>
+  area.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.metaKey) return;
+    event.preventDefault();
+    if (document.queryCommandSupported?.("insertLineBreak")) {
+      document.execCommand("insertLineBreak");
+      return;
+    }
+    document.execCommand("insertHTML", false, "<br>\u200B");
+  });
+
   requestAnimationFrame(() => {
     area.focus();
   });
 
   return {
-    getValue: () => sanitizeRichHtml(area.innerHTML),
+    getValue: () => {
+      const clone = area.cloneNode(true);
+      normalizeContentEditableBlocks(clone);
+      return sanitizeRichHtml(clone.innerHTML);
+    },
     focus: () => area.focus(),
   };
 }

@@ -1721,6 +1721,7 @@ function hideRichTextContentDialog() {
   if (form) {
     form.style.width = "";
     form.style.maxWidth = "";
+    form.style.minWidth = "";
   }
 }
 
@@ -1752,10 +1753,12 @@ async function openRichTextContentDialog(row, cell = null) {
   const value = row.getData().content;
 
   const cellWidth = Math.round(getContentCellWidth(row, cell));
-  const maxWidth = Math.max(280, window.innerWidth - 32);
-  const dialogWidth = Math.max(280, Math.min(cellWidth, maxWidth));
+  const maxWidth = Math.max(320, window.innerWidth - 32);
+  // Mindestens Zellenbreite, zusätzlich großzügig (ca. 80% Viewport), damit Zeilen nicht umbrechen
+  const dialogWidth = Math.max(280, Math.min(maxWidth, Math.max(cellWidth, Math.floor(window.innerWidth * 0.8))));
   form.style.width = `${dialogWidth}px`;
   form.style.maxWidth = `${dialogWidth}px`;
+  form.style.minWidth = `${Math.min(dialogWidth, maxWidth)}px`;
 
   richTextModalController = mountRichTextModalEditor(host, value);
   dialog.classList.add("is-open");
