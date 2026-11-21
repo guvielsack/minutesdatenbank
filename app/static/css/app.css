@@ -621,7 +621,8 @@ main { padding: 0 16px 16px; }
   display: none;
 }
 
-.modal-date-field input[type="date"] {
+.modal-date-field input[type="date"],
+.modal-date-field select {
   border: 1px solid var(--border);
   padding: 6px 8px;
   font: inherit;

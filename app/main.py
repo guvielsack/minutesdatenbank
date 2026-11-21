@@ -179,6 +179,7 @@ def suggest_next_meeting(db: Session = Depends(get_db)) -> dict:
     return {
         "suggested_date": suggest_next_meeting_date(last_date),
         "previous_meeting_date": last_date,
+        "previous_meeting_id": last_meeting.part_entry_id if last_meeting else None,
         "agenda_items": agenda_items,
     }
 
@@ -267,11 +268,15 @@ def add_meeting(
         last_meeting = get_last_meeting_block(db)
         last_date = last_meeting.meeting_date if last_meeting else None
         meeting_date = payload.meeting_date or suggest_next_meeting_date(last_date)
-        return create_meeting_with_agenda(
-            db,
-            meeting_date=meeting_date,
-            participants=participants,
-        )
+        try:
+            return create_meeting_with_agenda(
+                db,
+                meeting_date=meeting_date,
+                participants=participants,
+                source_meeting_id=payload.source_meeting_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return create_meeting(db, meeting_date=date.today(), participants=participants)
 

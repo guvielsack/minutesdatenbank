@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>minutesdatenbank</title>
   <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet" />
-  <link href="/static/css/app.css?v=11" rel="stylesheet" />
+  <link href="/static/css/app.css?v=12" rel="stylesheet" />
 </head>
 <body>
   <header class="app-header">
@@ -145,7 +145,11 @@
       </label>
       <label class="modal-option">
         <input type="radio" name="meeting-create-mode" value="agenda" />
-        <span>Meeting mit Agenda vom vorherigen Meeting kopieren</span>
+        <span>Meeting mit Agenda von einem früheren Termin kopieren</span>
+      </label>
+      <label id="meeting-create-source-field" class="modal-date-field hidden">
+        <span>Agenda übernehmen von</span>
+        <select id="meeting-create-source"></select>
       </label>
       <label id="meeting-create-date-field" class="modal-date-field hidden">
         <span>Datum des neuen Meetings</span>
@@ -175,6 +179,6 @@
   <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
   <script src="/static/js/column-filters.js?v=15"></script>
   <script src="/static/js/rich-text.js?v=5"></script>
-  <script src="/static/js/app.js?v=45"></script>
+  <script src="/static/js/app.js?v=46"></script>
 </body>
 </html>

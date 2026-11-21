@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models import MinuteEntry
 from app.schemas import MinuteEntryCreate
-from app.services.minutes_meetings import group_minutes_into_meetings
+from app.services.minutes_meetings import get_meeting_by_part_id, group_minutes_into_meetings
 
 
 def _normalize_type(value: str | None) -> str | None:
@@ -158,14 +158,24 @@ def create_meeting_with_agenda(
     db: Session,
     meeting_date: date,
     participants: str | None = None,
+    source_meeting_id: int | None = None,
 ) -> MinuteEntry:
-    last_meeting = get_last_meeting_block(db)
+    entries = db.query(MinuteEntry).order_by(MinuteEntry.row_nr, MinuteEntry.id).all()
+    source_meeting = None
+    if source_meeting_id is not None:
+        source_meeting = get_meeting_by_part_id(entries, source_meeting_id)
+        if source_meeting is None:
+            raise ValueError("Quell-Meeting nicht gefunden")
+    else:
+        meetings = group_minutes_into_meetings(entries)
+        source_meeting = meetings[-1] if meetings else None
+
     part = create_meeting(db, meeting_date=meeting_date, participants=participants)
 
-    if last_meeting is None:
+    if source_meeting is None:
         return part
 
-    agenda_templates = [entry for entry in last_meeting.entries if entry.entry_type == "A"]
+    agenda_templates = [entry for entry in source_meeting.entries if entry.entry_type == "A"]
     last_row_nr = part.row_nr
     for template in agenda_templates:
         created = create_minute_entry(

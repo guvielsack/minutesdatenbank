@@ -1210,8 +1210,27 @@ function formatDateForInput(value) {
 
 function updateMeetingCreateDialogState() {
   const mode = document.querySelector('input[name="meeting-create-mode"]:checked')?.value;
-  const dateField = document.getElementById("meeting-create-date-field");
-  dateField.classList.toggle("hidden", mode !== "agenda");
+  const isAgenda = mode === "agenda";
+  document.getElementById("meeting-create-date-field").classList.toggle("hidden", !isAgenda);
+  document.getElementById("meeting-create-source-field").classList.toggle("hidden", !isAgenda);
+  if (isAgenda) {
+    updateMeetingCreateSourceHint();
+  } else {
+    document.getElementById("meeting-create-hint").textContent =
+      "Legt nur eine neue Meeting-Zeile (Part.) an.";
+  }
+}
+
+function updateMeetingCreateSourceHint() {
+  const hint = document.getElementById("meeting-create-hint");
+  const sourceSelect = document.getElementById("meeting-create-source");
+  const selected = sourceSelect?.selectedOptions?.[0];
+  if (!selected || !selected.value) {
+    hint.textContent = "Es gibt noch kein vorheriges Meeting mit Agenda.";
+    return;
+  }
+  const agendaItems = Number(selected.dataset.agendaItems || 0);
+  hint.textContent = `Agenda von ${selected.textContent.split(" · ")[0]} · ${agendaItems} Agenda-Punkte werden kopiert.`;
 }
 
 function showOpenTasksDialog() {
@@ -1276,10 +1295,10 @@ async function showOpenTasksFilter() {
   await loadMinutes({ scrollState });
 }
 
-function showMeetingCreateDialog(suggestion) {
+async function showMeetingCreateDialog(suggestion) {
   const dialog = document.getElementById("meeting-create-dialog");
-  const hint = document.getElementById("meeting-create-hint");
   const dateInput = document.getElementById("meeting-create-date");
+  const sourceSelect = document.getElementById("meeting-create-source");
   const rowMode = document.querySelector('input[name="meeting-create-mode"][value="row"]');
   const agendaMode = document.querySelector('input[name="meeting-create-mode"][value="agenda"]');
 
@@ -1287,12 +1306,29 @@ function showMeetingCreateDialog(suggestion) {
   agendaMode.checked = false;
   dateInput.value = formatDateForInput(suggestion.suggested_date);
 
-  if (suggestion.previous_meeting_date) {
-    hint.textContent = `Vorheriges Meeting: ${formatDateDE(suggestion.previous_meeting_date)} · ${suggestion.agenda_items} Agenda-Punkte werden kopiert.`;
-  } else if (suggestion.agenda_items > 0) {
-    hint.textContent = `${suggestion.agenda_items} Agenda-Punkte werden vom letzten Meeting kopiert.`;
+  const meetings = await api("/api/minutes/meetings");
+  const options = [...meetings].reverse();
+  sourceSelect.innerHTML = "";
+  if (!options.length) {
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Kein früheres Meeting vorhanden";
+    sourceSelect.appendChild(empty);
   } else {
-    hint.textContent = "Es gibt noch kein vorheriges Meeting mit Agenda.";
+    options.forEach((meeting) => {
+      const option = document.createElement("option");
+      option.value = String(meeting.id);
+      option.dataset.agendaItems = String(meeting.agenda_items || 0);
+      const agendaLabel = `${meeting.agenda_items || 0} Agenda-Punkte`;
+      option.textContent = `${meeting.label} · ${agendaLabel}`;
+      sourceSelect.appendChild(option);
+    });
+    const preferredId = suggestion.previous_meeting_id;
+    if (preferredId != null && [...sourceSelect.options].some((opt) => opt.value === String(preferredId))) {
+      sourceSelect.value = String(preferredId);
+    } else {
+      sourceSelect.selectedIndex = 0;
+    }
   }
 
   updateMeetingCreateDialogState();
@@ -1322,6 +1358,8 @@ function setupMeetingCreateDialog() {
     input.addEventListener("change", updateMeetingCreateDialogState);
   });
 
+  document.getElementById("meeting-create-source").addEventListener("change", updateMeetingCreateSourceHint);
+
   dialog.querySelector('[data-action="cancel-meeting-create"]').addEventListener("click", () => {
     hideMeetingCreateDialog(null);
   });
@@ -1331,11 +1369,20 @@ function setupMeetingCreateDialog() {
     const mode = document.querySelector('input[name="meeting-create-mode"]:checked')?.value;
     if (mode === "agenda") {
       const meetingDate = document.getElementById("meeting-create-date").value;
+      const sourceMeetingId = document.getElementById("meeting-create-source").value;
       if (!meetingDate) {
         alert("Bitte ein Meeting-Datum wählen.");
         return;
       }
-      hideMeetingCreateDialog({ mode: "agenda", meetingDate });
+      if (!sourceMeetingId) {
+        alert("Bitte ein Quell-Meeting für die Agenda wählen.");
+        return;
+      }
+      hideMeetingCreateDialog({
+        mode: "agenda",
+        meetingDate,
+        sourceMeetingId: Number(sourceMeetingId),
+      });
       return;
     }
     hideMeetingCreateDialog({ mode: "row" });
@@ -1357,6 +1404,7 @@ async function addMeeting() {
     {
       with_agenda: true,
       meeting_date: choice.meetingDate,
+      source_meeting_id: choice.sourceMeetingId,
     },
     { editContent: false }
   );

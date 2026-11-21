@@ -76,6 +76,7 @@ def list_meeting_summaries(entries: list[MinuteEntry]) -> list[dict]:
                 "meeting_date": meeting_date,
                 "label": format_meeting_label(meeting_date, duplicate_index),
                 "participants": meeting.participants,
+                "agenda_items": len([entry for entry in meeting.entries if entry.entry_type == "A"]),
             }
         )
 

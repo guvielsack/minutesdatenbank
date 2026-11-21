@@ -85,11 +85,21 @@ class MinuteRowMove(BaseModel):
 class MeetingCreate(BaseModel):
     with_agenda: bool = False
     meeting_date: date | None = None
+    source_meeting_id: int | None = None
 
 
 class MeetingCreateSuggestionOut(BaseModel):
     suggested_date: date
     previous_meeting_date: date | None = None
+    previous_meeting_id: int | None = None
+    agenda_items: int = 0
+
+
+class MeetingSummaryOut(BaseModel):
+    id: int
+    meeting_date: date | None = None
+    label: str
+    participants: str | None = None
     agenda_items: int = 0
 
 
@@ -147,10 +157,3 @@ class ImportResult(BaseModel):
     year_plan_rows: int
     year_plan_included: bool = True
     source_file: str
-
-
-class MeetingSummaryOut(BaseModel):
-    id: int
-    meeting_date: date | None = None
-    label: str
-    participants: str | None = None
